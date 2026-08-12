@@ -1,0 +1,1286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resolver Bench — rotor angle sensing on AURIX TC3xx</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --chassis:#d7dce2; --panel:#eef1f4; --panel-2:#e3e8ed;
+  --ink:#14202b; --muted:#5d6d7d; --rule:#bfc8d2;
+  --screen:#0d1620; --grid:#1c2b39;
+  --sin:#f2681f; --cos:#15a394; --exc:#7d93a8; --err:#dc4436; --warn:#c98a12;
+  --shadow:0 1px 0 #fff inset, 0 1px 3px rgba(20,32,43,.16);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:linear-gradient(180deg,#e2e6eb 0,var(--chassis) 340px,var(--chassis) 100%);
+  color:var(--ink);font-family:"IBM Plex Sans",system-ui,sans-serif;font-size:15px;
+  line-height:1.55;-webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:0 22px 90px}
+.silk{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;text-transform:uppercase;
+  letter-spacing:.14em;font-size:11px;color:var(--muted)}
+.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+h1,h2{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;margin:0}
+h1{font-size:clamp(34px,5.2vw,58px);line-height:1.03}
+h2{font-size:clamp(20px,2.5vw,28px);line-height:1.14}
+h3{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;font-size:14px;margin:0 0 8px;
+  text-transform:uppercase;letter-spacing:.1em;color:var(--muted)}
+p{margin:0 0 12px}
+
+header{padding:62px 0 38px;border-bottom:1px solid var(--rule)}
+.eyebrow{display:flex;gap:14px;align-items:center;margin-bottom:20px}
+.eyebrow .tick{height:1px;flex:1;background:var(--rule)}
+.lede{max-width:58ch;margin:20px 0 0;color:var(--muted);font-size:16.5px}
+.lede b{color:var(--ink);font-weight:500}
+
+.module{padding:50px 0;border-bottom:1px solid var(--rule)}
+.mod-head{display:flex;gap:18px;align-items:baseline}
+.mod-head .idx{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--sin);padding-top:6px;flex:none}
+.mod-sub{color:var(--muted);max-width:64ch;margin:10px 0 26px}
+
+.panel{background:var(--panel);border:1px solid var(--rule);border-radius:5px;
+  box-shadow:var(--shadow);padding:16px 18px 18px}
+.panel-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px}
+.screen{background:var(--screen);border-radius:4px;border:1px solid #0a1119;display:block;width:100%}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+.g-side{display:grid;grid-template-columns:1fr 268px;gap:18px;align-items:start}
+.g-sensor{display:grid;grid-template-columns:330px 1fr;gap:18px;align-items:start}
+.g3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;align-items:start}
+
+.ctl{margin:13px 0 0}
+.ctl-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:4px}
+.ctl-val{font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:500}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:20px;background:transparent;cursor:pointer;margin:0}
+input[type=range]::-webkit-slider-runnable-track{height:3px;background:var(--rule);border-radius:2px}
+input[type=range]::-moz-range-track{height:3px;background:var(--rule);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;height:15px;margin-top:-6px;
+  border-radius:50%;background:var(--ink);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--ink)}
+input[type=range]::-moz-range-thumb{width:13px;height:13px;border-radius:50%;background:var(--ink);
+  border:2px solid var(--panel);box-shadow:0 0 0 1px var(--ink)}
+input[type=range]:focus-visible{outline:2px solid var(--sin);outline-offset:3px}
+select{font-family:"IBM Plex Mono",monospace;font-size:12.5px;padding:5px 7px;border:1px solid var(--rule);
+  border-radius:3px;background:#fff;color:var(--ink);width:100%}
+
+button{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;text-transform:uppercase;
+  letter-spacing:.1em;font-size:11px;color:var(--ink);background:linear-gradient(180deg,#fbfcfd,#dfe4ea);
+  border:1px solid var(--rule);border-radius:3px;padding:8px 12px;cursor:pointer;box-shadow:0 1px 0 #fff inset}
+button:hover{background:linear-gradient(180deg,#fff,#e9edf1)}
+button:active{background:#d8dee5}
+button:focus-visible{outline:2px solid var(--sin);outline-offset:2px}
+button[aria-pressed=true]{background:var(--ink);color:#f2f5f8;border-color:var(--ink)}
+.btn-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:13px}
+.btn-accent{background:linear-gradient(180deg,#fff4ee,#f8d9c7);border-color:#e0a988;color:#8a3a10}
+
+.readout{background:var(--panel-2);border:1px solid var(--rule);border-radius:4px;padding:9px 12px;
+  display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.readout+.readout{margin-top:6px}
+.readout .v{font-family:"IBM Plex Mono",monospace;font-size:15px;font-weight:500}
+.v.warn{color:var(--err)} .v.good{color:var(--cos)} .v.caution{color:var(--warn)}
+
+.chips{display:flex;gap:15px;flex-wrap:wrap;margin-top:11px}
+.chip{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+.swatch{width:11px;height:11px;border-radius:2px;flex:none}
+
+.note{margin-top:13px;padding:10px 13px;border-left:3px solid var(--rule);background:var(--panel-2);
+  border-radius:0 4px 4px 0;font-size:13.5px}
+.note b{font-weight:600}
+.note.ok{border-left-color:var(--cos)} .note.bad{border-left-color:var(--err)}
+
+table.t{width:100%;border-collapse:collapse;margin-top:11px;font-size:13px}
+table.t th{text-align:left;font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;
+  text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--muted);
+  padding:0 0 6px;border-bottom:1px solid var(--rule)}
+table.t td{padding:6px 0;border-bottom:1px solid var(--rule);vertical-align:top}
+table.t td:last-child{text-align:right;font-family:"IBM Plex Mono",monospace;font-weight:500;white-space:nowrap}
+table.t td.lbl{font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+ul.spec{margin:0;padding-left:18px;font-size:13.5px;color:var(--muted)}
+ul.spec li{margin-bottom:7px}
+ul.spec b{color:var(--ink);font-weight:500}
+
+.led{display:inline-block;width:9px;height:9px;border-radius:50%;flex:none;margin-right:7px;
+  background:#9aa8b6;box-shadow:0 0 0 1px rgba(0,0,0,.12) inset}
+.led.on{background:var(--cos);box-shadow:0 0 7px rgba(21,163,148,.65)}
+.led.trip{background:var(--err);box-shadow:0 0 7px rgba(220,68,54,.65)}
+.led.pend{background:var(--warn)}
+.state-row{display:flex;align-items:center;gap:0;padding:7px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.state-row .nm{flex:1}
+.state-row .tm{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--muted)}
+.state-row.active{font-weight:600}
+
+footer{padding:38px 0 0;color:var(--muted);font-size:13.5px;max-width:66ch}
+footer a{color:var(--ink)}
+
+@media (max-width:980px){.g2,.g-side,.g-sensor,.g3{grid-template-columns:1fr}}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow"><span class="silk">Resolver Bench</span><span class="tick"></span><span class="silk">AURIX&trade; TC3xx &middot; EDSADC</span></div>
+  <h1>Where is the<br>rotor, right now?</h1>
+  <p class="lede">A working model of a resolver angle path: front end, demodulation, calibration, tracking observer, startup and diagnostics. <b>One configuration drives every module</b> &mdash; change the carrier frequency in section 01 and the latency budget, noise floor and design checks all move with it.</p>
+</header>
+
+<!-- ============================ 00 SCOPE ============================ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">00</span><h2>What this models, and what it does not</h2></div>
+  <p class="mod-sub">Stated up front, because a simulation you cannot bound is a simulation you cannot trust.</p>
+  <div class="g2">
+    <div class="panel">
+      <h3>Modelled</h3>
+      <ul class="spec">
+        <li><b>Ideal transformer coupling</b> with transformation ratio k, linear in sin/cos of the resolver electrical angle.</li>
+        <li><b>Amplitude modulation</b> of a single-frequency carrier, with a lumped phase shift representing winding inductance, excitation amplifier and receive filters.</li>
+        <li><b>Static channel errors:</b> per-channel offset, inter-channel gain mismatch, demodulation phase error, first-order eccentricity.</li>
+        <li><b>Delta-sigma quantisation noise</b> for an ideal 2nd-order modulator with sinc<sup>3</sup> decimation, used to derive an angle noise floor.</li>
+        <li><b>Discrete-time tracking observer</b> at the PWM rate, type II or type III, integrated with an explicit Euler step.</li>
+        <li><b>Latency</b> as the sum of demodulation window, filter group delay, observer lag and PWM update quantisation.</li>
+      </ul>
+    </div>
+    <div class="panel">
+      <h3>Not modelled &mdash; verify on hardware</h3>
+      <ul class="spec">
+        <li><b>Inverter common-mode injection</b> into the resolver cabling. In practice this dominates the noise budget and no analytic model replaces a scope on the real harness.</li>
+        <li><b>Temperature drift</b> of winding resistance, which moves the demodulation phase over an operating cycle. Calibrate hot.</li>
+        <li><b>Higher-order mechanical harmonics</b> from winding distribution and rotor runout. Only 1st order eccentricity is included here.</li>
+        <li><b>Modulator overload</b>, clipping and the non-idealities of a real analogue front end.</li>
+        <li><b>Multi-speed resolvers</b> beyond a simple pole-pair scaling. Absolute position recovery is out of scope.</li>
+        <li><b>Fault reaction</b> at vehicle level. Detection is modelled; the safe state is your system's problem.</li>
+      </ul>
+      <div class="note"><b>Sign convention.</b> Angles increase counter-clockwise. Electrical angle is the resolver angle times resolver pole pairs; motor electrical angle uses motor pole pairs. The two are independent and a mismatch is a classic commissioning error.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 01 FRONT END ============================ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">01</span><h2>The front end sets everything downstream</h2></div>
+  <p class="mod-sub">A resolver is a rotating transformer: one excited rotor winding, two stator windings ninety degrees apart. The choices here &mdash; carrier frequency, transformation ratio, gain, decimation &mdash; fix your noise floor, your latency and whether the design is even self-consistent.</p>
+
+  <div class="g-sensor">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Cross-section</span><span class="silk num" id="thetaLabel">0.0&deg;</span></div>
+      <canvas id="cvResolver" class="screen" style="height:290px"></canvas>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Shaft angle</span><span class="ctl-val" id="valTheta">0&deg;</span></div>
+        <input type="range" id="rngTheta" min="0" max="359" step="1" value="0" aria-label="Shaft angle">
+      </div>
+      <div class="btn-row">
+        <button id="btnSpin" aria-pressed="true">Spin</button>
+        <button id="btnStep">Step 45&deg;</button>
+      </div>
+      <div class="chips">
+        <span class="chip"><span class="swatch" style="background:var(--sin)"></span>Stator A &middot; sin</span>
+        <span class="chip"><span class="swatch" style="background:var(--cos)"></span>Stator B &middot; cos</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Winding voltages over one revolution</span><span class="silk">Carrier &times; envelope</span></div>
+      <canvas id="cvWaves" class="screen" style="height:300px"></canvas>
+      <p style="font-size:13px;color:var(--muted);margin:12px 0 0">Both windings return the same carrier. Only the amplitude differs, and the amplitudes are sine and cosine of the angle. The dashed outline is the envelope &mdash; strip the carrier and that is all that remains.</p>
+    </div>
+  </div>
+
+  <div class="g3" style="margin-top:18px">
+    <div class="panel">
+      <h3>Excitation &amp; sensor</h3>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Carrier frequency</span><span class="ctl-val" id="vFexc">10.0 kHz</span></div>
+        <input type="range" id="rFexc" min="2" max="30" step="0.5" value="10" aria-label="Carrier frequency kHz">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Excitation</span><span class="ctl-val" id="vVexc">7.0 Vrms</span></div>
+        <input type="range" id="rVexc" min="2" max="12" step="0.5" value="7" aria-label="Excitation volts rms">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Transformation ratio k</span><span class="ctl-val" id="vK">0.35</span></div>
+        <input type="range" id="rK" min="0.2" max="0.6" step="0.01" value="0.35" aria-label="Transformation ratio">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Resolver pole pairs</span><span class="ctl-val" id="vPPR">1</span></div>
+        <input type="range" id="rPPR" min="1" max="4" step="1" value="1" aria-label="Resolver pole pairs">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Analogue path &amp; EDSADC</h3>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Receive gain</span><span class="ctl-val" id="vGain">&times;0.26</span></div>
+        <input type="range" id="rGain" min="0.05" max="1.5" step="0.01" value="0.26" aria-label="Receive gain">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Modulator clock</span><span class="ctl-val" id="vFmod">20.0 MHz</span></div>
+        <input type="range" id="rFmod" min="5" max="40" step="1" value="20" aria-label="Modulator clock MHz">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">CIC decimation</span><span class="ctl-val" id="vDec">64</span></div>
+        <input type="range" id="rDec" min="8" max="256" step="8" value="64" aria-label="CIC decimation">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Control / PWM rate</span><span class="ctl-val" id="vFpwm">10.0 kHz</span></div>
+        <input type="range" id="rFpwm" min="4" max="20" step="1" value="10" aria-label="PWM rate kHz">
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>Derived</h3>
+      <div class="readout"><span class="silk">Secondary, peak</span><span class="v" id="oVsec">2.45 Vrms</span></div>
+      <div class="readout"><span class="silk">ADC range used</span><span class="v" id="oUtil">98 %</span></div>
+      <div class="readout"><span class="silk">Quantisation SNR</span><span class="v" id="oSNR">92 dB</span></div>
+      <div class="readout"><span class="silk">Angle noise, 1&sigma;</span><span class="v" id="oNoise">0.002&deg;</span></div>
+      <div class="readout"><span class="silk">Carrier : PWM ratio</span><span class="v" id="oRatio">1.00</span></div>
+      <div class="note" id="feNote"><b>Consistent.</b></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 02 DEMODULATION ============================ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">02</span><h2>Demodulation, and why the phase term matters</h2></div>
+  <p class="mod-sub">Multiply each channel by the carrier reference and average over a whole number of carrier periods. The carrier cancels and sine and cosine remain. A plain rectifier would also strip the carrier &mdash; and destroy the sign, leaving you unable to tell 45&deg; from 225&deg;.</p>
+
+  <div class="g-side">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Reference &times; signal, one carrier period</span><span class="silk num" id="demOut">1.000</span></div>
+      <canvas id="cvDemod" class="screen" style="height:300px"></canvas>
+      <div class="chips">
+        <span class="chip"><span class="swatch" style="background:var(--sin)"></span>Received signal</span>
+        <span class="chip"><span class="swatch" style="background:var(--exc)"></span>Demod reference</span>
+        <span class="chip"><span class="swatch" style="background:var(--cos)"></span>Product, integrated</span>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Phase alignment</h3>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Physical phase shift</span><span class="ctl-val" id="vPhys">12.0&deg;</span></div>
+        <input type="range" id="rPhys" min="0" max="40" step="0.5" value="12" aria-label="Physical phase shift">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Demod sign delay</span><span class="ctl-val" id="vComp">0.0&deg;</span></div>
+        <input type="range" id="rComp" min="0" max="40" step="0.5" value="0" aria-label="Demodulation compensation">
+      </div>
+      <div class="btn-row"><button class="btn-accent" id="btnMatch" style="width:100%">Match the reference</button></div>
+      <div class="readout" style="margin-top:13px"><span class="silk">Mismatch &Delta;&phi;</span><span class="v" id="oDphi">12.0&deg;</span></div>
+      <div class="readout"><span class="silk">Amplitude kept</span><span class="v" id="oAmpRet">97.8 %</span></div>
+      <div class="readout"><span class="silk">Leakage</span><span class="v" id="oLeak">20.8 %</span></div>
+      <div class="note" id="demNote">Amplitude falls as cos&Delta;&phi; and the quadrature term leaks across as sin&Delta;&phi;. The leakage is the damaging part: it tilts the calibration ellipse and adds a constant angle offset that looks exactly like a wrong motor alignment.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 03 CALIBRATION ============================ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">03</span><h2>Calibration: you want a circle centred on zero</h2></div>
+  <p class="mod-sub">The angle is the polar angle of the point (cos, sin) about the origin, so the measured point must orbit the origin at constant radius. Radius cancels; shape and centre do not. Each way the shape breaks has its own harmonic signature.</p>
+
+  <div class="g-side">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">X&ndash;Y scope</span><span class="silk" id="shapeName">Circle</span></div>
+      <canvas id="cvLissajous" class="screen" style="height:360px"></canvas>
+      <div class="chips">
+        <span class="chip"><span class="swatch" style="background:#e9eff5;border:1px solid var(--muted)"></span>Measured</span>
+        <span class="chip"><span class="swatch" style="background:#2c4054"></span>Ideal</span>
+        <span class="chip"><span class="swatch" style="background:var(--err)"></span>Live point</span>
+      </div>
+      <div class="panel-top" style="margin:18px 0 10px">
+        <span class="silk">Angle error over one revolution</span><span class="silk num" id="peakErr">&plusmn;0.00&deg;</span>
+      </div>
+      <canvas id="cvError" class="screen" style="height:150px"></canvas>
+    </div>
+
+    <div class="panel">
+      <h3>Physical faults</h3>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Offset, cos</span><span class="ctl-val" id="valA">0.0 %</span></div>
+        <input type="range" id="rngA" min="-20" max="20" step="0.5" value="0" aria-label="Offset cos">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Offset, sin</span><span class="ctl-val" id="valB">0.0 %</span></div>
+        <input type="range" id="rngB" min="-20" max="20" step="0.5" value="0" aria-label="Offset sin">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Gain mismatch</span><span class="ctl-val" id="valG">0.0 %</span></div>
+        <input type="range" id="rngG" min="-30" max="30" step="0.5" value="0" aria-label="Gain mismatch">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Eccentricity</span><span class="ctl-val" id="valE">0.0&deg;</span></div>
+        <input type="range" id="rngE" min="0" max="3" step="0.05" value="0" aria-label="Eccentricity">
+      </div>
+      <div class="btn-row">
+        <button data-preset="offset">Offset</button>
+        <button data-preset="gain">Gain</button>
+        <button data-preset="ecc">Eccentric</button>
+        <button data-preset="mess">All</button>
+        <button data-preset="clean">Clean</button>
+      </div>
+
+      <h3 style="margin-top:20px">Compensation</h3>
+      <div class="btn-row" style="margin-top:0">
+        <button id="btnEstimate" class="btn-accent" style="width:100%">Estimate &amp; apply OFFCOMP / GAINCOMP</button>
+      </div>
+      <div class="btn-row"><button id="btnLut" aria-pressed="false" style="width:100%">Harmonic correction table</button></div>
+
+      <table class="t">
+        <thead><tr><th>Term</th><th>Cause</th><th style="text-align:right">Size</th></tr></thead>
+        <tbody>
+          <tr><td>DC</td><td class="lbl">Demod phase</td><td id="hDC">0.00&deg;</td></tr>
+          <tr><td>1st harm.</td><td class="lbl">Offset, eccentricity</td><td id="h1">0.00&deg;</td></tr>
+          <tr><td>2nd harm.</td><td class="lbl">Gain, phase</td><td id="h2">0.00&deg;</td></tr>
+          <tr><td>RMS</td><td class="lbl">Total</td><td id="hRMS">0.00&deg;</td></tr>
+        </tbody>
+      </table>
+      <div class="note" style="border-left-color:var(--warn)"><b>Order matters, and not only for convenience.</b> Offset error and eccentricity both produce a first harmonic, so an offset estimate run on an eccentric resolver will silently absorb part of the eccentricity into OFFCOMP. Fit the harmonic table first on a unit you know is eccentric, or iterate: estimate, correct, re-estimate.</div>
+      <div class="note" id="verdict"><b>Circle, centred.</b> Gains matched, offsets nulled, channels ninety degrees apart.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 04 OBSERVER ============================ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">04</span><h2>The tracking observer, run properly</h2></div>
+  <p class="mod-sub">Not atan2. A discrete-time loop at the control rate that filters noise, supplies speed, and whose order determines whether it can follow acceleration without lagging. Simulated below against a real speed profile: ramp to 8000 rpm, then constant.</p>
+
+  <div class="g-side">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Tracking error, electrical degrees</span><span class="silk num" id="obsPk">0.00&deg;</span></div>
+      <canvas id="cvObs" class="screen" style="height:250px"></canvas>
+      <div class="panel-top" style="margin:16px 0 10px"><span class="silk">Speed profile</span><span class="silk">accelerate &rarr; cruise</span></div>
+      <canvas id="cvProfile" class="screen" style="height:110px"></canvas>
+      <div class="note" id="obsNote"></div>
+    </div>
+    <div class="panel">
+      <h3>Loop design</h3>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Loop bandwidth</span><span class="ctl-val" id="vBw">800 rad/s</span></div>
+        <input type="range" id="rBw" min="100" max="3000" step="50" value="800" aria-label="Observer bandwidth">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Damping ratio</span><span class="ctl-val" id="vZeta">0.90</span></div>
+        <input type="range" id="rZeta" min="0.3" max="1.5" step="0.05" value="0.9" aria-label="Damping">
+      </div>
+      <div class="ctl" style="margin-top:16px">
+        <div class="ctl-row"><span class="silk">Observer order</span></div>
+        <select id="selType">
+          <option value="2">Type II &mdash; PI, zero error at constant speed</option>
+          <option value="3">Type III &mdash; adds acceleration integrator</option>
+        </select>
+      </div>
+      <div class="btn-row"><button id="btnNoise" aria-pressed="true">Sensor noise</button></div>
+      <p style="font-size:12.5px;color:var(--muted);margin:10px 0 0" id="typeHint"></p>
+
+      <div style="margin-top:14px">
+        <div class="readout"><span class="silk">Lag, accelerating</span><span class="v" id="oAccErr">0.00&deg;</span></div>
+        <div class="readout"><span class="silk">Error at cruise</span><span class="v" id="oCruise">0.00&deg;</span></div>
+        <div class="readout"><span class="silk">Output noise</span><span class="v" id="oObsNoise">0.00&deg;</span></div>
+        <div class="readout"><span class="silk">Pull-in, 60&deg; seed</span><span class="v" id="oSettle">&mdash;</span></div>
+      </div>
+      <div class="note"><b>Discretisation limit.</b> Keep &omega;n below roughly one tenth of the control rate. Above that the explicit Euler integration this model uses &mdash; and most production code &mdash; starts to misbehave, and the readouts here will show it.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 05 LATENCY ============================ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">05</span><h2>The latency budget, itemised</h2></div>
+  <p class="mod-sub">Every stage adds delay. At speed the shaft has moved on by the time you use the reading, and nothing looks broken. The contributions below come from your section 01 and 04 settings, so tightening the filter here loosens the noise floor there.</p>
+
+  <div class="g-side">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Where the delay comes from</span><span class="silk num" id="totLat">0 &micro;s</span></div>
+      <canvas id="cvBudget" class="screen" style="height:190px"></canvas>
+      <div class="panel-top" style="margin:16px 0 10px"><span class="silk">Consequence at speed</span></div>
+      <canvas id="cvLag" class="screen" style="height:230px"></canvas>
+    </div>
+    <div class="panel">
+      <h3>Operating point</h3>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Shaft speed</span><span class="ctl-val" id="valRpm">6,000 rpm</span></div>
+        <input type="range" id="rngRpm" min="0" max="20000" step="250" value="6000" aria-label="Shaft speed">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Motor pole pairs</span><span class="ctl-val" id="valPP">4</span></div>
+        <input type="range" id="rngPP" min="1" max="8" step="1" value="4" aria-label="Motor pole pairs">
+      </div>
+      <div class="btn-row"><button id="btnComp" aria-pressed="false" style="width:100%">Compensate &theta; + &omega;&middot;t</button></div>
+      <div style="margin-top:14px">
+        <div class="readout"><span class="silk">Total delay</span><span class="v" id="oLat">0 &micro;s</span></div>
+        <div class="readout"><span class="silk">Angle error</span><span class="v" id="outLagDeg">0.0&deg;</span></div>
+        <div class="readout"><span class="silk">Torque per amp</span><span class="v" id="outTorque">100.0 %</span></div>
+        <div class="readout"><span class="silk">Wasted on d-axis</span><span class="v" id="outDaxis">0.0 %</span></div>
+      </div>
+      <div class="note"><b>Measure, do not estimate.</b> Back-drive at constant speed against a reference and take the slope of error versus speed. The EDSADC timestamp register gives you the conversion instant directly, which removes most of the guesswork.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 06 STARTUP ============================ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">06</span><h2>Initialisation is a sequence, not a function call</h2></div>
+  <p class="mod-sub">You cannot close the current loop until the angle is trustworthy, and the angle is not trustworthy until several conditions hold in order. Run it and watch the gates open.</p>
+
+  <div class="g-side">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Acquisition</span><span class="silk num" id="initClock">0 ms</span></div>
+      <canvas id="cvInit" class="screen" style="height:260px"></canvas>
+      <div class="btn-row">
+        <button class="btn-accent" id="btnInit">Run startup</button>
+        <button id="btnInitStand" aria-pressed="true">At standstill</button>
+      </div>
+      <div class="note" id="initNote">Press run. At standstill the sequence can perform d-axis alignment; on a rotating shaft it must skip that step and take the offset from non-volatile memory.</div>
+    </div>
+    <div class="panel">
+      <h3>Gate sequence</h3>
+      <div id="stateList"></div>
+      <div class="note" style="margin-top:16px"><b>Why this order.</b> Excitation must be stable before amplitude means anything. Amplitude must be valid before atan2 gives a usable seed. The seed must exist before the observer can lock without a long pull-in. And alignment requires a stationary rotor, so if the shaft is already turning you must trust the stored offset and verify it later against a back-EMF estimate.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 07 DIAGNOSTICS ============================ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">07</span><h2>Diagnostics: what trips, and what gets missed</h2></div>
+  <p class="mod-sub">For any safety-relevant drive the angle path needs continuous monitoring. Inject a fault and watch which monitor catches it. Note that no single monitor covers everything &mdash; that is the point of having several.</p>
+
+  <div class="g-side">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Monitor signals</span><span class="silk" id="diagState">Healthy</span></div>
+      <canvas id="cvDiag" class="screen" style="height:290px"></canvas>
+      <div class="chips">
+        <span class="chip"><span class="swatch" style="background:var(--cos)"></span>Signal magnitude</span>
+        <span class="chip"><span class="swatch" style="background:var(--sin)"></span>Excitation current</span>
+        <span class="chip"><span class="swatch" style="background:var(--err)"></span>Observer error</span>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>Inject</h3>
+      <div class="btn-row" style="margin-top:0">
+        <button data-fault="none" aria-pressed="true">Healthy</button>
+        <button data-fault="sinopen">Sin open</button>
+        <button data-fault="excloss">Excitation lost</button>
+        <button data-fault="short">Short</button>
+        <button data-fault="degraded">Degraded</button>
+        <button data-fault="noise">Noise burst</button>
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Confirmation cycles</span><span class="ctl-val" id="vConf">5</span></div>
+        <input type="range" id="rConf" min="1" max="30" step="1" value="5" aria-label="Confirmation cycles">
+      </div>
+      <div class="readout" style="margin-top:10px"><span class="silk">Reaction time</span><span class="v" id="oReact">500 &micro;s</span></div>
+      <div id="monList" style="margin-top:14px"></div>
+      <div class="note" id="diagNote">All monitors within limits.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================ 08 SUMMARY ============================ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">08</span><h2>Design review</h2></div>
+  <p class="mod-sub">Every check below is computed from the configuration you have set. Red items are worth resolving before you commit the schematic.</p>
+  <div class="g2">
+    <div class="panel">
+      <h3>Checks</h3>
+      <div id="checkList"></div>
+    </div>
+    <div class="panel">
+      <h3>Configuration</h3>
+      <table class="t"><tbody id="cfgTable"></tbody></table>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Idealised model &mdash; see section 00 for scope. Built as a companion to a write-up on resolver angle sensing with the AURIX TC3xx EDSADC. Numbers are for reasoning about tradeoffs, not for signing off a design.
+</footer>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+const TAU=Math.PI*2, D2R=Math.PI/180, R2D=180/Math.PI;
+const css=getComputedStyle(document.documentElement), C=n=>css.getPropertyValue(n).trim();
+const COL={sin:C('--sin'),cos:C('--cos'),exc:C('--exc'),err:C('--err'),warn:C('--warn'),
+           grid:C('--grid'),muted:'#7d8b99',screen:C('--screen'),fg:'#e9eff5'};
+const reduced=matchMedia('(prefers-reduced-motion: reduce)').matches;
+const $=id=>document.getElementById(id);
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+
+/* ===================== shared configuration ===================== */
+const cfg={
+  fexc:10000, Vexc:7, k:0.35, ppRes:1,
+  gain:0.26, fmod:20e6, dec:64, fpwm:10000,
+  phys:12, comp:0,
+  a:0,b:0,g:0,ecc:0,
+  ca:0,cb:0,cg:0,cp:0, lut:false,
+  bw:800, zeta:0.9, type:2, noise:true,
+  rpm:6000, ppMot:4, latComp:false,
+  theta:0, spin:!reduced,
+  fault:'none', standstill:true, conf:5
+};
+const ADC_FS=1.0;                       // differential full scale, volts peak
+
+/* ===================== derived quantities ===================== */
+let D={};
+function derive(){
+  const Vsec = cfg.Vexc*cfg.k;                        // rms at peak coupling
+  const Vpk  = Vsec*Math.SQRT2*cfg.gain;              // volts peak at the ADC
+  const util = Vpk/ADC_FS;
+  const OSR  = cfg.dec;
+  // ideal 2nd-order delta-sigma with sinc3 decimation
+  const L=2;
+  const snr = 6.02 + 1.76 + (2*L+1)*10*Math.log10(OSR) - 10*Math.log10(Math.pow(Math.PI,2*L)/(2*L+1));
+  const snrEff = snr + 20*Math.log10(Math.min(1,util));   // under-filling the range costs you directly
+  const sigAmp = Math.pow(10,-snrEff/20);                 // relative to full scale
+  const sigAngRad = sigAmp/Math.max(0.05,Math.min(1,util));
+  const noiseDeg = sigAngRad*R2D;
+
+  const tDemod = 0.5/cfg.fexc;                        // group delay of a one-period integration
+  const tCic   = 1.5*cfg.dec/cfg.fmod;                // sinc3 group delay
+  const tPwm   = 0.5/cfg.fpwm;                        // actuation quantisation
+  const tObs   = 0;                                   // type II: zero lag at constant speed
+  const tTot   = tDemod+tCic+tPwm;
+
+  const ratio  = cfg.fexc/cfg.fpwm;
+  const ratioInt = Math.abs(ratio-Math.round(ratio))<1e-6;
+  const beat   = ratioInt?0:Math.abs(cfg.fexc-Math.round(ratio)*cfg.fpwm);
+
+  const feMax  = cfg.rpm/60*cfg.ppRes;                // resolver electrical Hz at top speed
+  const envRatio = cfg.fexc/Math.max(1,feMax);
+
+  D={Vsec,Vpk,util,OSR,snr:snrEff,noiseDeg,tDemod,tCic,tObs,tPwm,tTot,ratio,ratioInt,beat,feMax,envRatio};
+  return D;
+}
+
+/* ===================== canvas helpers ===================== */
+function fit(cv){
+  const dpr=Math.min(window.devicePixelRatio||1,2);
+  const w=cv.clientWidth,h=cv.clientHeight;
+  if(!w||!h) return null;
+  if(cv.width!==Math.round(w*dpr)||cv.height!==Math.round(h*dpr)){cv.width=Math.round(w*dpr);cv.height=Math.round(h*dpr);}
+  const g=cv.getContext('2d'); g.setTransform(dpr,0,0,dpr,0,0); g.clearRect(0,0,w,h);
+  g.fillStyle=COL.screen; g.fillRect(0,0,w,h);
+  return {g,w,h};
+}
+function txt(g,t,x,y,col,size,align){
+  g.fillStyle=col; g.font='500 '+(size||10)+'px "IBM Plex Mono", monospace';
+  g.textAlign=align||'left'; g.textBaseline='middle'; g.fillText(t,x,y);
+}
+function poly(g,pts,col,lw,dash){
+  g.strokeStyle=col; g.lineWidth=lw||1.5; g.setLineDash(dash||[]);
+  g.beginPath(); pts.forEach((p,i)=>i?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]));
+  g.stroke(); g.setLineDash([]);
+}
+
+/* ===================== sensor model ===================== */
+// Physical channels, including eccentricity, offsets, gain, and the residual
+// demodulation phase. Compensation is applied afterwards, as it would be in silicon.
+function rawChannels(th){
+  const dphi=(cfg.phys-cfg.comp)*D2R;
+  const te = th*cfg.ppRes + cfg.ecc*D2R*Math.sin(th);   // eccentricity distorts the angle itself
+  const x = Math.cos(te) + cfg.a;
+  const y = (1+cfg.g)*(Math.sin(te)*Math.cos(dphi)+Math.cos(te)*Math.sin(dphi)) + cfg.b;
+  return {x,y};
+}
+function channels(th){
+  const r=rawChannels(th);
+  const u=r.x-cfg.ca;
+  const v=(r.y-cfg.cb)/(1+cfg.cg);
+  const cp=Math.cos(cfg.cp*D2R)||1;
+  return {x:u, y:(v-u*Math.sin(cfg.cp*D2R))/cp};
+}
+function wrap(e){while(e>Math.PI)e-=TAU;while(e<-Math.PI)e+=TAU;return e;}
+function estimate(th){
+  const c=channels(th);
+  let a=Math.atan2(c.y,c.x);
+  if(cfg.lut) a-=cfg.ecc*D2R*Math.sin(a/Math.max(1,cfg.ppRes));   // correction table
+  return a;
+}
+function errAt(th){ return wrap(estimate(th)-th*cfg.ppRes)*R2D; }
+
+function harmonics(){
+  const N=720; let dc=0,c1=0,s1=0,c2=0,s2=0,pk=0,sq=0;
+  for(let i=0;i<N;i++){
+    const th=i/N*TAU, e=errAt(th);
+    dc+=e; sq+=e*e;
+    c1+=e*Math.cos(th); s1+=e*Math.sin(th);
+    c2+=e*Math.cos(2*th); s2+=e*Math.sin(2*th);
+    if(Math.abs(e)>pk)pk=Math.abs(e);
+  }
+  return {dc:dc/N, h1:2*Math.hypot(c1,s1)/N, h2:2*Math.hypot(c2,s2)/N,
+          peak:pk, rms:Math.sqrt(sq/N)};
+}
+// Estimate compensation from the measured locus, the way a real routine would.
+function estimateComp(){
+  const N=720; let mx=0,my=0;
+  for(let i=0;i<N;i++){const r=rawChannels(i/N*TAU); mx+=r.x; my+=r.y;}
+  mx/=N; my/=N;
+  let su=0,sv=0,suv=0;
+  for(let i=0;i<N;i++){
+    const r=rawChannels(i/N*TAU), u=r.x-mx, v=r.y-my;
+    su+=u*u; sv+=v*v; suv+=u*v;
+  }
+  const Au=Math.sqrt(2*su/N), Av=Math.sqrt(2*sv/N);
+  const gEst=Av/Au-1;
+  const sinp=clamp(2*(suv/N)/(Au*Av),-0.99,0.99);
+  return {ca:mx, cb:my, cg:gEst, cp:Math.asin(sinp)*R2D};
+}
+
+/* ===================== 01 resolver + waves ===================== */
+function drawResolver(){
+  const f=fit($('cvResolver')); if(!f)return; const {g,w,h}=f;
+  const cx=w/2,cy=h/2,Ro=Math.min(w,h)/2-14,Ri=Ro-24,Rr=Ri-38;
+  g.strokeStyle=COL.grid; g.lineWidth=1.5;
+  g.beginPath();g.arc(cx,cy,Ro,0,TAU);g.stroke();
+  g.beginPath();g.arc(cx,cy,Ri,0,TAU);g.stroke();
+  const te=cfg.theta*cfg.ppRes;
+  const sA=Math.abs(Math.sin(te)),sB=Math.abs(Math.cos(te));
+  function pole(ang,col,amt){
+    g.strokeStyle=col; g.globalAlpha=.2+.8*amt; g.lineWidth=3;
+    for(let k=0;k<3;k++){g.beginPath();g.arc(cx,cy,Ri+3+k*8,-ang-.22,-ang+.22);g.stroke();}
+    g.globalAlpha=1;
+  }
+  pole(Math.PI/2,COL.sin,sA); pole(-Math.PI/2,COL.sin,sA);
+  pole(0,COL.cos,sB); pole(Math.PI,COL.cos,sB);
+  g.strokeStyle=COL.grid;g.lineWidth=1;g.setLineDash([4,4]);
+  g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+Ri,cy);g.stroke();g.setLineDash([]);
+  g.save();g.translate(cx,cy);g.rotate(-cfg.theta);
+  g.fillStyle='#16242f';g.strokeStyle=COL.exc;g.lineWidth=2;
+  g.beginPath();
+  if(g.roundRect)g.roundRect(-Rr,-15,Rr*2,30,15); else g.rect(-Rr,-15,Rr*2,30);
+  g.fill();g.stroke();
+  for(let k=0;k<4;k++){const xo=-Rr*.52+k*(Rr*.35);
+    g.beginPath();g.moveTo(xo,-15);g.quadraticCurveTo(xo+7,0,xo,15);g.stroke();}
+  g.restore();
+  const ar=Rr+16;
+  g.strokeStyle='#c9d6e2';g.lineWidth=2;
+  g.beginPath();g.arc(cx,cy,ar,-cfg.theta,0);g.stroke();
+  g.beginPath();g.moveTo(cx,cy);g.lineTo(cx+Ri*Math.cos(cfg.theta),cy-Ri*Math.sin(cfg.theta));g.stroke();
+  g.fillStyle='#c9d6e2';g.beginPath();g.arc(cx,cy,5,0,TAU);g.fill();
+  const ta=cfg.theta/2;
+  g.fillStyle=COL.screen;g.beginPath();g.arc(cx+(ar+14)*Math.cos(ta),cy-(ar+14)*Math.sin(ta),10,0,TAU);g.fill();
+  txt(g,'\u03b8',cx+(ar+14)*Math.cos(ta),cy-(ar+14)*Math.sin(ta),'#c9d6e2',12,'center');
+  if(cfg.ppRes>1) txt(g,cfg.ppRes+'X SPEED',cx,h-11,COL.muted,9.5,'center');
+}
+function drawWaves(){
+  const f=fit($('cvWaves')); if(!f)return; const {g,w,h}=f;
+  const L=44,R=w-12,N=760,gap=h/3,amp=gap*.32;
+  const cyc=Math.max(8,Math.min(46,cfg.fexc/500));
+  const defs=[['EXCITATION',COL.exc,null],
+              ['STATOR A',COL.sin,t=>Math.sin(t*cfg.ppRes)],
+              ['STATOR B',COL.cos,t=>Math.cos(t*cfg.ppRes)]];
+  defs.forEach((d,i)=>{
+    const y0=gap*(i+.5);
+    g.strokeStyle=COL.grid;g.lineWidth=1;
+    g.beginPath();g.moveTo(L,y0);g.lineTo(R,y0);g.stroke();
+    txt(g,d[0],8,y0-amp-9,d[1],9.5);
+    if(d[2]){
+      g.strokeStyle=d[1];g.globalAlpha=.75;g.lineWidth=1.6;g.setLineDash([5,4]);
+      for(const s of[1,-1]){g.beginPath();
+        for(let k=0;k<=N;k++){const t=k/N*TAU,x=L+(k/N)*(R-L),y=y0-s*d[2](t)*amp;k?g.lineTo(x,y):g.moveTo(x,y);}
+        g.stroke();}
+      g.setLineDash([]);g.globalAlpha=1;
+    }
+    g.strokeStyle=d[1];g.lineWidth=1;g.globalAlpha=.95;g.beginPath();
+    for(let k=0;k<=N;k++){const t=k/N*TAU,e=d[2]?d[2](t):1,x=L+(k/N)*(R-L),y=y0-e*Math.sin(t*cyc)*amp;
+      k?g.lineTo(x,y):g.moveTo(x,y);}
+    g.stroke();g.globalAlpha=1;
+  });
+  const cx=L+(cfg.theta/TAU)*(R-L);
+  g.strokeStyle=COL.fg;g.globalAlpha=.45;g.setLineDash([3,3]);
+  g.beginPath();g.moveTo(cx,8);g.lineTo(cx,h-20);g.stroke();g.setLineDash([]);g.globalAlpha=1;
+  defs.forEach((d,i)=>{if(!d[2])return;
+    g.fillStyle=d[1];g.beginPath();g.arc(cx,gap*(i+.5)-d[2](cfg.theta)*amp,3.5,0,TAU);g.fill();});
+  g.strokeStyle=COL.grid;g.beginPath();g.moveTo(L,h-16);g.lineTo(R,h-16);g.stroke();
+  [0,90,180,270,360].forEach(dg=>txt(g,dg+'\u00b0',L+(dg/360)*(R-L),h-7,COL.muted,9.5,'center'));
+}
+
+/* ===================== 02 demodulation ===================== */
+function drawDemod(){
+  const f=fit($('cvDemod')); if(!f)return; const {g,w,h}=f;
+  const L=44,R=w-12,gap=h/3,amp=gap*.30;
+  const dphi=(cfg.phys-cfg.comp)*D2R, env=Math.cos(30*D2R);   // fixed illustrative angle
+  const N=600, cycles=2;
+  const sig=t=>env*Math.sin(t+cfg.phys*D2R);
+  const ref=t=>Math.sin(t+cfg.comp*D2R)>=0?1:-1;
+  const rows=[['RECEIVED',COL.sin,sig],['REFERENCE',COL.exc,ref],['PRODUCT',COL.cos,t=>sig(t)*ref(t)]];
+  rows.forEach((d,i)=>{
+    const y0=gap*(i+.5);
+    g.strokeStyle=COL.grid;g.lineWidth=1;
+    g.beginPath();g.moveTo(L,y0);g.lineTo(R,y0);g.stroke();
+    txt(g,d[0],8,y0-amp-10,d[1],9.5);
+    if(i===2){
+      g.fillStyle=d[1];g.globalAlpha=.18;g.beginPath();g.moveTo(L,y0);
+      for(let k=0;k<=N;k++){const t=k/N*TAU*cycles;g.lineTo(L+(k/N)*(R-L),y0-d[2](t)*amp);}
+      g.lineTo(R,y0);g.closePath();g.fill();g.globalAlpha=1;
+    }
+    const pts=[];
+    for(let k=0;k<=N;k++){const t=k/N*TAU*cycles;pts.push([L+(k/N)*(R-L),y0-d[2](t)*amp]);}
+    poly(g,pts,d[1],i===1?1.4:1.6);
+  });
+  const val=env*Math.cos(dphi)*(2/Math.PI);
+  const y0=gap*2.5;
+  g.strokeStyle=COL.fg;g.setLineDash([4,3]);g.lineWidth=1.4;
+  g.beginPath();g.moveTo(L,y0-val*amp*(Math.PI/2));g.lineTo(R,y0-val*amp*(Math.PI/2));g.stroke();g.setLineDash([]);
+  txt(g,'mean = '+(env*Math.cos(dphi)).toFixed(3),R-4,y0-val*amp*(Math.PI/2)-11,COL.fg,9.5,'right');
+  txt(g,'shown at \u03b8 = 30\u00b0',R-4,14,COL.muted,9.5,'right');
+  if(Math.abs(dphi)>0.02)
+    txt(g,'\u0394\u03c6 = '+((cfg.phys-cfg.comp).toFixed(1))+'\u00b0 \u2014 reference misaligned',R-4,28,COL.err,10,'right');
+}
+
+/* ===================== 03 lissajous + error ===================== */
+function drawLissajous(){
+  const f=fit($('cvLissajous')); if(!f)return; const {g,w,h}=f;
+  const cx=w/2,cy=h/2,R=Math.min(w,h)/2-28;
+  g.strokeStyle=COL.grid;g.lineWidth=1;
+  for(let k=-2;k<=2;k++){const o=k*R/2;
+    g.beginPath();g.moveTo(cx-R-10,cy+o);g.lineTo(cx+R+10,cy+o);g.stroke();
+    g.beginPath();g.moveTo(cx+o,cy-R-10);g.lineTo(cx+o,cy+R+10);g.stroke();}
+  g.strokeStyle='#2c4054';g.lineWidth=1.5;g.setLineDash([3,4]);
+  g.beginPath();g.arc(cx,cy,R,0,TAU);g.stroke();g.setLineDash([]);
+  g.strokeStyle='#95a8ba';g.lineWidth=1;
+  g.beginPath();g.moveTo(cx-7,cy);g.lineTo(cx+7,cy);g.stroke();
+  g.beginPath();g.moveTo(cx,cy-7);g.lineTo(cx,cy+7);g.stroke();
+  const P=t=>{const c=channels(t);return [cx+c.x*R,cy-c.y*R];};
+  const pts=[];for(let k=0;k<=360;k++)pts.push(P(k/360*TAU));
+  poly(g,pts,COL.fg,2);
+  const p=P(cfg.theta);
+  poly(g,[[cx,cy],p],COL.err,1.5);
+  poly(g,[[cx,cy],[cx+Math.cos(cfg.theta*cfg.ppRes)*R,cy-Math.sin(cfg.theta*cfg.ppRes)*R]],'#4f6b85',1,[3,3]);
+  g.fillStyle=COL.err;g.beginPath();g.arc(p[0],p[1],4.5,0,TAU);g.fill();
+  txt(g,'\u2191 sin',12,16,COL.sin,9.5);
+  txt(g,'cos \u2192',w-12,h-13,COL.cos,9.5,'right');
+}
+function drawError(H){
+  const f=fit($('cvError')); if(!f)return; const {g,w,h}=f;
+  const L=50,R=w-12,T=14,B=h-20,mid=(T+B)/2;
+  const span=Math.max(.5,H.peak*1.25),sc=(B-T)/2/span;
+  g.strokeStyle=COL.grid;g.lineWidth=1;
+  [T,mid,B].forEach(y=>{g.beginPath();g.moveTo(L,y);g.lineTo(R,y);g.stroke();});
+  txt(g,'+'+span.toFixed(2)+'\u00b0',L-6,T,COL.muted,9.5,'right');
+  txt(g,'0',L-6,mid,COL.muted,9.5,'right');
+  txt(g,'\u2212'+span.toFixed(2)+'\u00b0',L-6,B,COL.muted,9.5,'right');
+  const pts=[];
+  for(let k=0;k<=360;k++)pts.push([L+(k/360)*(R-L),mid-errAt(k/360*TAU)*sc]);
+  poly(g,pts,COL.err,2);
+  g.fillStyle=COL.fg;g.beginPath();
+  g.arc(L+(cfg.theta/TAU)*(R-L),mid-errAt(cfg.theta)*sc,3.5,0,TAU);g.fill();
+  [0,90,180,270,360].forEach(dg=>txt(g,dg+'\u00b0',L+(dg/360)*(R-L),h-8,COL.muted,9.5,'center'));
+}
+
+/* ===================== 04 observer simulation ===================== */
+let obsCache=null, obsDirty=true;
+function simObserver(){
+  const fs=cfg.fpwm, dt=1/fs, T=0.30, N=Math.round(T*fs);
+  const wn=cfg.bw;
+  const kp = cfg.type>2 ? 3*wn    : 2*cfg.zeta*wn;    // type III: triple pole at -wn
+  const ki = cfg.type>2 ? 3*wn*wn : wn*wn;
+  const ka = cfg.type>2 ? wn*wn*wn: 0;
+  const wMax=8000/60*TAU*cfg.ppMot;           // electrical rad/s at 8000 rpm
+  const tAcc=0.12, alpha=wMax/tAcc;
+  const sig=cfg.noise?D.noiseDeg*D2R:0;
+  let th=0,thHat=-60*D2R,wHat=0,aHat=0;              // seeded 60 deg off, as after coarse acquisition
+  const err=[],spd=[];
+  let pkAcc=0,sumCruise=0,nCruise=0,varC=0,settle=-1;
+  for(let i=0;i<N;i++){
+    const t=i*dt;
+    const wTrue=t<tAcc?alpha*t:wMax;
+    // measure and update, both referenced to time t
+    const nx=sig*gauss(), ny=sig*gauss();
+    const x=Math.cos(th)+nx, y=Math.sin(th)+ny;
+    const m=Math.max(1e-6,Math.hypot(x,y));
+    const eps=(y*Math.cos(thHat)-x*Math.sin(thHat))/m;
+    if(cfg.type>2){aHat+=ka*eps*dt; wHat+=(aHat+ki*eps)*dt;}
+    else{wHat+=ki*eps*dt;}
+    thHat+=(wHat+kp*eps)*dt;
+    th+=wTrue*dt;                                     // advance truth to t+dt as well
+    const e=wrap(thHat-th)*R2D;
+    err.push(e); spd.push(wTrue/(TAU*cfg.ppMot)*60);
+    if(t>0.03&&t<tAcc-0.005&&Math.abs(e)>pkAcc)pkAcc=Math.abs(e);
+    if(t>tAcc+0.06){sumCruise+=e;nCruise++;}
+    if(settle<0&&Math.abs(e)<1)settle=t;
+  }
+  const mean=nCruise?sumCruise/nCruise:0;
+  if(nCruise){for(let i=N-nCruise;i<N;i++)varC+=(err[i]-mean)*(err[i]-mean);varC/=nCruise;}
+  return {err,spd,dt,N,pkAcc,cruise:mean,noise:Math.sqrt(varC),settle,tAcc};
+}
+let gSpare=null;
+function gauss(){
+  if(gSpare!==null){const v=gSpare;gSpare=null;return v;}
+  let u,v,s;do{u=Math.random()*2-1;v=Math.random()*2-1;s=u*u+v*v;}while(s>=1||s===0);
+  const m=Math.sqrt(-2*Math.log(s)/s); gSpare=v*m; return u*m;
+}
+function drawObserver(){
+  if(obsDirty){obsCache=simObserver();obsDirty=false;}
+  const O=obsCache;
+  const f=fit($('cvObs')); if(!f)return; const {g,w,h}=f;
+  const L=52,R=w-12,T=16,B=h-22,mid=(T+B)/2;
+  const skip=Math.round(0.02/O.dt);                 // ignore the seeding transient when scaling
+  let pk=0.2; for(let i=skip;i<O.N;i++){if(Math.abs(O.err[i])>pk)pk=Math.abs(O.err[i]);}
+  const sc=(B-T)/2/(pk*1.15);
+  g.strokeStyle=COL.grid;g.lineWidth=1;
+  [T,mid,B].forEach(y=>{g.beginPath();g.moveTo(L,y);g.lineTo(R,y);g.stroke();});
+  txt(g,'+'+(pk*1.15).toFixed(2)+'\u00b0',L-6,T,COL.muted,9.5,'right');
+  txt(g,'0',L-6,mid,COL.muted,9.5,'right');
+  txt(g,'\u2212'+(pk*1.15).toFixed(2)+'\u00b0',L-6,B,COL.muted,9.5,'right');
+  const xAcc=L+(O.tAcc/(O.N*O.dt))*(R-L);
+  g.fillStyle='#16242f';g.fillRect(L,T,xAcc-L,B-T);
+  txt(g,'accelerating',L+6,T+10,COL.muted,9.5);
+  txt(g,'seeding transient clipped',R-6,B-10,COL.muted,9,'right');
+  txt(g,'constant speed',xAcc+6,T+10,COL.muted,9.5);
+  const pts=[];
+  for(let i=0;i<O.N;i++)pts.push([L+(i/O.N)*(R-L),mid-clamp(O.err[i],-pk*1.15,pk*1.15)*sc]);
+  poly(g,pts,COL.err,1.6);
+  [0,0.1,0.2,0.3].forEach(t=>txt(g,t.toFixed(1)+'s',L+(t/0.3)*(R-L),h-9,COL.muted,9.5,'center'));
+  const f2=fit($('cvProfile')); if(!f2)return;
+  const G=f2.g,W2=f2.w,H2=f2.h,L2=52,R2b=W2-12,T2=14,B2=H2-16;
+  G.strokeStyle=COL.grid;G.lineWidth=1;
+  G.beginPath();G.moveTo(L2,B2);G.lineTo(R2b,B2);G.stroke();
+  const p2=[];
+  for(let i=0;i<O.N;i++)p2.push([L2+(i/O.N)*(R2b-L2),B2-(O.spd[i]/8500)*(B2-T2)]);
+  poly(G,p2,COL.cos,1.8);
+  txt(G,'8000 rpm',L2-6,T2+4,COL.muted,9.5,'right');
+  txt(G,'0',L2-6,B2,COL.muted,9.5,'right');
+}
+
+/* ===================== 05 latency ===================== */
+function lagRad(){
+  if(cfg.latComp) return 0;
+  return (cfg.rpm/60*TAU*cfg.ppMot)*D.tTot;
+}
+function drawBudget(){
+  const f=fit($('cvBudget')); if(!f)return; const {g,w,h}=f;
+  const items=[['Demod window',D.tDemod,COL.sin],['CIC group delay',D.tCic,COL.cos],
+               ['PWM update',D.tPwm,COL.warn]];
+  const L=132,R=w-72,T=22,rowH=(h-T-18)/items.length;
+  const max=Math.max(...items.map(i=>i[1]));
+  txt(g,'CONTRIBUTION',12,12,COL.muted,9.5);
+  txt(g,'\u00b5s',w-12,12,COL.muted,9.5,'right');
+  items.forEach((it,i)=>{
+    const y=T+rowH*i+rowH/2;
+    txt(g,it[0],12,y,COL.fg,10.5);
+    const bw=(it[1]/max)*(R-L);
+    g.fillStyle=it[2];g.globalAlpha=.85;g.fillRect(L,y-7,Math.max(2,bw),14);g.globalAlpha=1;
+    txt(g,(it[1]*1e6).toFixed(1),w-12,y,it[2],10.5,'right');
+  });
+  g.strokeStyle=COL.grid;g.beginPath();g.moveTo(L,h-14);g.lineTo(R,h-14);g.stroke();
+  txt(g,'total '+(D.tTot*1e6).toFixed(1)+' \u00b5s',w-12,h-8,COL.fg,10,'right');
+}
+function drawLag(){
+  const f=fit($('cvLag')); if(!f)return; const {g,w,h}=f;
+  const err=lagRad(),ph=performance.now()/1400;
+  const cx=w*.24,cy=h/2,R=Math.min(h*.32,w*.19);
+  g.strokeStyle=COL.grid;g.lineWidth=1;g.beginPath();g.arc(cx,cy,R,0,TAU);g.stroke();
+  function vec(a,col,dash){
+    g.strokeStyle=col;g.lineWidth=2.5;g.setLineDash(dash||[]);
+    const x=cx+Math.cos(a)*R,y=cy-Math.sin(a)*R;
+    g.beginPath();g.moveTo(cx,cy);g.lineTo(x,y);g.stroke();g.setLineDash([]);
+    g.fillStyle=col;g.beginPath();g.arc(x,y,4,0,TAU);g.fill();
+  }
+  vec(ph,COL.cos);
+  if(Math.abs(err)>1e-4){vec(ph-err,COL.err,[4,3]);
+    g.strokeStyle=COL.err;g.globalAlpha=.55;g.lineWidth=1.5;
+    g.beginPath();g.arc(cx,cy,R*.45,-ph,-(ph-err));g.stroke();g.globalAlpha=1;}
+  g.fillStyle='#c9d6e2';g.beginPath();g.arc(cx,cy,4,0,TAU);g.fill();
+  txt(g,'\u25cf true rotor',cx,cy+R+20,COL.cos,9.5,'center');
+  txt(g,cfg.latComp?'\u25cf compensated':'\u25cf '+(err*R2D).toFixed(1)+'\u00b0 behind',
+      cx,cy+R+36,cfg.latComp?COL.cos:COL.err,9.5,'center');
+  const L=w*.48,Rt=w-18,T=26,B=h-34;
+  const tq=r=>{const e=cfg.latComp?0:(r/60*TAU*cfg.ppMot)*D.tTot;return Math.max(0,Math.cos(e));};
+  const tMin=tq(20000),lo=Math.max(0,Math.min(tMin-.02,.985));
+  const map=v=>B-(B-T)*((v-lo)/(1-lo));
+  g.strokeStyle=COL.grid;g.lineWidth=1;
+  [1,lo+(1-lo)/2,lo].forEach(v=>{const y=map(v);g.beginPath();g.moveTo(L,y);g.lineTo(Rt,y);g.stroke();});
+  txt(g,'100%',L-6,T,COL.muted,9,'right');
+  txt(g,(lo*100).toFixed(lo>.99?1:0)+'%',L-6,B,COL.muted,9,'right');
+  txt(g,'TORQUE PER AMP vs SPEED',L,12,COL.muted,9.5);
+  const pts=[];for(let k=0;k<=120;k++)pts.push([L+(k/120)*(Rt-L),map(tq(k/120*20000))]);
+  poly(g,pts,cfg.latComp?COL.cos:COL.err,2);
+  const mx=L+(cfg.rpm/20000)*(Rt-L);
+  g.strokeStyle=COL.fg;g.globalAlpha=.45;g.setLineDash([3,3]);
+  g.beginPath();g.moveTo(mx,T);g.lineTo(mx,B);g.stroke();g.setLineDash([]);g.globalAlpha=1;
+  g.fillStyle=COL.fg;g.beginPath();g.arc(mx,map(tq(cfg.rpm)),4,0,TAU);g.fill();
+  g.strokeStyle=COL.grid;g.beginPath();g.moveTo(L,B);g.lineTo(Rt,B);g.stroke();
+  [0,10000,20000].forEach(r=>txt(g,(r/1000)+'k',L+(r/20000)*(Rt-L),B+14,COL.muted,9,'center'));
+}
+
+/* ===================== 06 startup sequence ===================== */
+const STATES=[
+  ['Excitation ramp','Carrier enabled, amplifier settling. Nothing downstream is meaningful yet.'],
+  ['Signal valid','Magnitude inside its window for a sustained period. Wiring proven.'],
+  ['Coarse acquisition','atan2 seeds the observer so it starts near the true angle.'],
+  ['Observer locked','Tracking error below threshold for N consecutive cycles.'],
+  ['Rotor alignment','d-axis DC injection at standstill. Skipped if the shaft is turning.'],
+  ['Ready','Angle trustworthy. Current loop may close.']
+];
+let initT=-1, initStart=0;
+function initTimes(){
+  const t=[0.020,0.045,0.048,0.075, cfg.standstill?0.400:0.076, cfg.standstill?0.410:0.080];
+  return t;
+}
+function drawInit(){
+  const f=fit($('cvInit')); if(!f)return; const {g,w,h}=f;
+  const T=initTimes(), total=T[T.length-1]*1.1;
+  const now=initT<0?0:Math.min(total,(performance.now()-initStart)/1000);
+  const L=14,R=w-14,top=30,rowH=(h-top-26)/STATES.length;
+  txt(g,'t = '+(now*1000).toFixed(0)+' ms',R,14,COL.fg,10.5,'right');
+  txt(g,'SEQUENCE',L,14,COL.muted,9.5);
+  STATES.forEach((s,i)=>{
+    const y=top+rowH*i+rowH/2;
+    const done=now>=T[i], skipped=(i===4&&!cfg.standstill);
+    const col=skipped?COL.muted:(done?COL.cos:COL.grid);
+    g.strokeStyle=COL.grid;g.lineWidth=1;
+    g.beginPath();g.moveTo(L+112,y);g.lineTo(R,y);g.stroke();
+    const x=L+112+((skipped?T[i]:T[i])/total)*(R-L-112);
+    if(done){g.fillStyle=col;g.beginPath();g.arc(x,y,5,0,TAU);g.fill();}
+    else{g.strokeStyle=COL.muted;g.lineWidth=1.5;g.beginPath();g.arc(x,y,5,0,TAU);g.stroke();}
+    txt(g,s[0].toUpperCase(),L,y,done?COL.fg:COL.muted,9.5);
+    if(skipped)txt(g,'skipped',x+10,y,COL.muted,9);
+  });
+  const px=L+112+(now/total)*(R-L-112);
+  g.strokeStyle=COL.sin;g.lineWidth=1.5;
+  g.beginPath();g.moveTo(px,top);g.lineTo(px,h-24);g.stroke();
+  let idx=-1;STATES.forEach((s,i)=>{if(now>=T[i])idx=i;});
+  const lab=idx<0?'idle':(idx>=STATES.length-1?'READY':STATES[idx][0]);
+  txt(g,lab.toUpperCase(),L,h-12,idx>=STATES.length-1?COL.cos:COL.sin,10.5);
+  // list
+  const list=$('stateList');
+  if(list.dataset.n!==String(STATES.length)){
+    list.innerHTML=STATES.map((s,i)=>
+      `<div class="state-row" data-i="${i}"><span class="led"></span><span class="nm">${s[0]}<br>
+       <span style="color:var(--muted);font-size:12px;font-weight:400">${s[1]}</span></span>
+       <span class="tm">${(T[i]*1000).toFixed(0)} ms</span></div>`).join('');
+    list.dataset.n=String(STATES.length);
+  }
+  [...list.children].forEach((row,i)=>{
+    const led=row.querySelector('.led'), done=now>=T[i], skipped=(i===4&&!cfg.standstill);
+    led.className='led'+(skipped?'':(done?' on':(now>0?' pend':'')));
+    row.classList.toggle('active',done&&(i===STATES.length-1||now<T[i+1]));
+    row.querySelector('.tm').textContent=skipped?'skipped':(T[i]*1000).toFixed(0)+' ms';
+  });
+}
+
+/* ===================== 07 diagnostics ===================== */
+const MONITORS=[
+  ['Amplitude window','sin\u00b2 + cos\u00b2 inside limits'],
+  ['Excitation current','primary drive current in range'],
+  ['Loss of tracking','|\u03b5| below threshold'],
+  ['Rate plausibility','\u0394\u03b8 within physical limit'],
+  ['Back-EMF cross-check','independent angle estimate agrees']
+];
+function faultSignals(t){
+  let mag=1, exc=1, eps=0.02+0.01*Math.sin(t*3), rate=1, xcheck=1;
+  switch(cfg.fault){
+    case 'sinopen':  mag=0.62+0.38*Math.abs(Math.cos(t*2)); eps=0.55; xcheck=0.4; break;
+    case 'excloss':  mag=0.05; exc=0.04; eps=0.9; xcheck=0.2; break;
+    case 'short':    mag=0.18; exc=2.6; eps=0.8; xcheck=0.25; break;
+    case 'degraded': mag=0.68; eps=0.09; xcheck=0.85; break;
+    case 'noise':    mag=1+0.10*gauss(); eps=0.30+0.12*Math.abs(gauss()); rate=1+0.5*Math.abs(gauss()); xcheck=0.7; break;
+  }
+  return {mag,exc,eps,rate,xcheck};
+}
+let diagTrace=[], faultIdx=-1, confCount=[0,0,0,0,0];
+function drawDiag(){
+  const f=fit($('cvDiag')); if(!f)return; const {g,w,h}=f;
+  const t=performance.now()/1000;
+  const s=faultSignals(t);
+  diagTrace.push(s); if(diagTrace.length>240)diagTrace.shift();
+  const L=46,R=w-12,T=18,B=h-40,FS=2.8;
+  g.strokeStyle=COL.grid;g.lineWidth=1;
+  [0,0.5,1,1.5,2,2.5].forEach(v=>{const y=B-(v/FS)*(B-T);g.beginPath();g.moveTo(L,y);g.lineTo(R,y);g.stroke();
+    txt(g,v.toFixed(1),L-6,y,COL.muted,9,'right');});
+  g.fillStyle=COL.cos;g.globalAlpha=.10;
+  g.fillRect(L,B-(1.25/FS)*(B-T),R-L,((1.25-0.75)/FS)*(B-T));g.globalAlpha=1;
+  txt(g,'amplitude window',L+6,B-(1.28/FS)*(B-T)-8,COL.cos,9);
+  const series=[['mag',COL.cos],['exc',COL.sin],['eps',COL.err]];
+  series.forEach(([key,col])=>{
+    const pts=diagTrace.map((d,i)=>[L+(i/240)*(R-L),B-(clamp(d[key],0,FS)/FS)*(B-T)]);
+    if(pts.length>1)poly(g,pts,col,1.6);
+  });
+  if(faultIdx>=0&&faultIdx<diagTrace.length){
+    const fx=L+(faultIdx/240)*(R-L);
+    g.strokeStyle=COL.fg;g.globalAlpha=.5;g.setLineDash([4,3]);g.lineWidth=1;
+    g.beginPath();g.moveTo(fx,T);g.lineTo(fx,B);g.stroke();g.setLineDash([]);g.globalAlpha=1;
+    txt(g,'fault injected',fx+5,T+9,COL.fg,9);
+  }
+  const raw=evalMonitors(s);
+  const trips=raw.map((v,i)=>{confCount[i]=v?confCount[i]+1:0; return confCount[i]>=cfg.conf;});
+  if(faultIdx>=0)faultIdx--;
+  txt(g,trips.some(x=>x)?'FAULT DETECTED':'ALL MONITORS OK',L,h-14,trips.some(x=>x)?COL.err:COL.cos,10.5);
+  updateMonList(trips,s);
+}
+function evalMonitors(s){
+  return [ s.mag<0.75||s.mag>1.25, s.exc<0.5||s.exc>1.8, s.eps>0.25, s.rate>1.3, s.xcheck<0.6 ];
+}
+function updateMonList(trips,s){
+  const el=$('monList');
+  if(el.dataset.n!==String(MONITORS.length)){
+    el.innerHTML=MONITORS.map((m,i)=>
+      `<div class="state-row" data-i="${i}"><span class="led"></span><span class="nm">${m[0]}<br>
+       <span style="color:var(--muted);font-size:12px">${m[1]}</span></span>
+       <span class="tm" data-v></span></div>`).join('');
+    el.dataset.n=String(MONITORS.length);
+  }
+  const vals=[s.mag.toFixed(2),s.exc.toFixed(2),s.eps.toFixed(2),s.rate.toFixed(2),s.xcheck.toFixed(2)];
+  [...el.children].forEach((row,i)=>{
+    row.querySelector('.led').className='led'+(trips[i]?' trip':' on');
+    row.querySelector('[data-v]').textContent=vals[i];
+  });
+  const names={none:'Healthy',sinopen:'Sin winding open',excloss:'Excitation lost',
+               short:'Short circuit',degraded:'Degraded signal',noise:'Noise burst'};
+  $('diagState').textContent=names[cfg.fault];
+  const caught=MONITORS.filter((m,i)=>trips[i]).map(m=>m[0]);
+  const notes={
+    none:'All monitors within limits. Note that a healthy reading here does not prove the angle is <em>correct</em> &mdash; only that the signals are plausible. Correctness comes from calibration.',
+    sinopen:'One winding open. Magnitude collapses on the affected axis but recovers each time the other winding dominates, so a slow amplitude check can miss it between peaks. The tracking error catches it faster.',
+    excloss:'No excitation, so both channels die together. Amplitude and excitation current both trip. This is the easiest fault to detect and the most catastrophic to miss.',
+    short:'Excitation current climbs while signal magnitude collapses. The current monitor is what distinguishes this from a simple open circuit &mdash; amplitude alone cannot tell them apart.',
+    degraded:'Amplitude has fallen but not far enough to trip a coarse window. This is the case that argues for a tight window plus the independent cross-check, because the angle is still being produced and still being believed.',
+    noise:'Intermittent. Rate plausibility and tracking error trip in bursts. Require N consecutive violations before reacting, or normal EMI will nuisance-trip the drive.'
+  };
+  $('diagNote').innerHTML=(caught.length?`<b>Caught by:</b> ${caught.join(', ')}. `:'')+notes[cfg.fault];
+}
+
+/* ===================== 08 design review ===================== */
+function checks(){
+  const out=[];
+  out.push([D.util>0.55&&D.util<1.0, `ADC range utilisation ${(D.util*100).toFixed(0)}%`,
+    D.util>=1.0?'Clipping. Reduce receive gain.':(D.util<=0.55?'Under-filled, wasting resolution. Raise the gain.':'Good headroom without clipping.')]);
+  out.push([D.ratioInt, `Carrier : PWM = ${D.ratio.toFixed(2)}`,
+    D.ratioInt?'Integer ratio, no beat.':`Non-integer. Expect a ${D.beat.toFixed(0)} Hz beat appearing as angle ripple and torque ripple.`]);
+  out.push([D.envRatio>=10, `Carrier is ${D.envRatio.toFixed(0)}\u00d7 the top electrical frequency`,
+    D.envRatio>=10?'Envelope well oversampled.':'Too few carrier cycles per electrical revolution. Raise the carrier or accept envelope distortion.']);
+  out.push([cfg.bw<=0.1*cfg.fpwm*TAU, `Observer \u03c9n = ${cfg.bw} rad/s at ${(cfg.fpwm/1000)}kHz`,
+    cfg.bw<=0.1*cfg.fpwm*TAU?'Comfortably inside the discretisation limit.':'Bandwidth too high for this control rate. Expect discretisation artefacts.']);
+  out.push([D.noiseDeg<0.05, `Angle noise floor ${D.noiseDeg.toFixed(3)}\u00b0`,
+    D.noiseDeg<0.05?'Quantisation noise is not your limiting factor.':'Noise floor is high. Increase decimation, gain, or modulator clock.']);
+  out.push([D.tTot*1e6<150, `Total latency ${(D.tTot*1e6).toFixed(0)} \u00b5s`,
+    D.tTot*1e6<150?'Normal for this carrier. Compensate it and it stops mattering.'
+      :'High. The demodulation window dominates \u2014 raise the carrier frequency if you need it lower.']);
+  const H=harmonics();
+  const dph=Math.abs(cfg.phys-cfg.comp-cfg.cp),
+        off=Math.hypot(cfg.a-cfg.ca,cfg.b-cfg.cb), gm=Math.abs(cfg.g-cfg.cg),
+        ec=cfg.lut?0:cfg.ecc;
+  let advice='Within a typical traction target.';
+  if(H.rms>=0.2){
+    if(dph>1) advice='Demodulation phase is unmatched by '+dph.toFixed(1)+'\u00b0. Fix that first \u2014 section 02 \u2014 because it biases every calibration estimate that follows.';
+    else if(off>0.02||gm>0.02) advice='Offset or gain mismatch dominates. Run the estimator to load OFFCOMP and GAINCOMP.';
+    else if(ec>0.2) advice='Eccentricity dominates. No register removes this; fit the harmonic correction table.';
+    else advice='Several terms contribute. Work in order: phase, offset, gain, harmonic table.';
+  }
+  out.push([H.rms<0.2, `Residual angle error ${H.rms.toFixed(2)}\u00b0 rms`, advice]);
+  return out;
+}
+function drawChecks(){
+  const el=$('checkList'), list=checks();
+  if(el.dataset.n!==String(list.length)){
+    el.innerHTML=list.map(()=>`<div class="state-row"><span class="led"></span>
+      <span class="nm"></span></div>`).join('');
+    el.dataset.n=String(list.length);
+  }
+  [...el.children].forEach((row,i)=>{
+    const [ok,title,msg]=list[i];
+    row.querySelector('.led').className='led'+(ok?' on':' trip');
+    row.querySelector('.nm').innerHTML=`${title}<br><span style="color:var(--muted);font-size:12px">${msg}</span>`;
+  });
+  const rows=[
+    ['Carrier',(cfg.fexc/1000).toFixed(1)+' kHz'],
+    ['Excitation',cfg.Vexc.toFixed(1)+' Vrms'],
+    ['Transformation ratio',cfg.k.toFixed(2)],
+    ['Resolver pole pairs',cfg.ppRes],
+    ['Receive gain','\u00d7'+cfg.gain.toFixed(2)],
+    ['Modulator clock',(cfg.fmod/1e6).toFixed(0)+' MHz'],
+    ['CIC decimation',cfg.dec],
+    ['Control rate',(cfg.fpwm/1000).toFixed(0)+' kHz'],
+    ['Demod sign delay',cfg.comp.toFixed(1)+'\u00b0'],
+    ['Observer',(cfg.type===3?'Type III':'Type II')+', \u03c9n '+cfg.bw+', \u03b6 '+cfg.zeta.toFixed(2)],
+    ['Motor pole pairs',cfg.ppMot],
+    ['Latency compensation',cfg.latComp?'on':'off']
+  ];
+  $('cfgTable').innerHTML=rows.map(r=>`<tr><td>${r[0]}</td><td>${r[1]}</td></tr>`).join('');
+}
+
+/* ===================== text refresh ===================== */
+function shapeOf(){
+  const off=Math.hypot(cfg.a-cfg.ca,cfg.b-cfg.cb),gm=Math.abs(cfg.g-cfg.cg),
+        ph=Math.abs(cfg.phys-cfg.comp-cfg.cp),ec=cfg.ecc*(cfg.lut?0:1);
+  if(off<.005&&gm<.005&&ph<.25&&ec<.05)
+    return['Circle','<b>Circle, centred.</b> Gains matched, offsets nulled, channels ninety degrees apart. This is the condition under which atan2 returns the true angle.'];
+  if(ec>=.3&&off<.02&&gm<.02&&ph<1)
+    return['Lumpy','<b>Not an ellipse &mdash; a distorted circle.</b> Mechanical eccentricity distorts the angle itself, so no offset or gain register can remove it. It needs a harmonic correction table fitted against a reference encoder.'];
+  if(off>=.02&&gm<.02&&ph<1)
+    return['Off-centre','<b>Circle pushed off the origin.</b> The pivot is no longer at zero, so the computed angle gains and loses once per turn &mdash; a pure first harmonic. Null it with the offset compensation registers.'];
+  if(gm>=.02&&off<.02&&ph<1)
+    return['Ellipse','<b>Ellipse, axes aligned.</b> One channel has more gain than the other, so the radius breathes twice per turn and drags the angle with it &mdash; a second harmonic. Correct with the gain compensation registers.'];
+  if(ph>=1&&off<.02&&gm<.02)
+    return['Tilted ellipse','<b>Ellipse, tilted.</b> The demodulation reference is out of step with the carrier and the channels cross-couple. That adds a constant offset <em>and</em> a second harmonic &mdash; and the constant part masquerades as a wrong motor alignment.'];
+  return['Distorted','<b>Several faults at once.</b> Work through them in order: offsets, then gain, then demodulation phase, then the harmonic table. Each one changes the shape the others produce, so fixing them out of order means chasing a moving target.'];
+}
+function refresh(){
+  derive();
+  const H=harmonics();
+  $('valTheta').textContent=(cfg.theta*R2D).toFixed(0)+'\u00b0';
+  $('thetaLabel').textContent=(cfg.theta*R2D).toFixed(1)+'\u00b0';
+  $('vFexc').textContent=(cfg.fexc/1000).toFixed(1)+' kHz';
+  $('vVexc').textContent=cfg.Vexc.toFixed(1)+' Vrms';
+  $('vK').textContent=cfg.k.toFixed(2);
+  $('vPPR').textContent=cfg.ppRes;
+  $('vGain').textContent='\u00d7'+cfg.gain.toFixed(2);
+  $('vFmod').textContent=(cfg.fmod/1e6).toFixed(1)+' MHz';
+  $('vDec').textContent=cfg.dec;
+  $('vFpwm').textContent=(cfg.fpwm/1000).toFixed(1)+' kHz';
+  $('oVsec').textContent=D.Vsec.toFixed(2)+' Vrms';
+  const util=$('oUtil'); util.textContent=(D.util*100).toFixed(0)+' %';
+  util.className='v'+(D.util>=1?' warn':(D.util<.55?' caution':' good'));
+  $('oSNR').textContent=D.snr.toFixed(0)+' dB';
+  $('oNoise').textContent=D.noiseDeg.toFixed(3)+'\u00b0';
+  const rr=$('oRatio'); rr.textContent=D.ratio.toFixed(2); rr.className='v'+(D.ratioInt?' good':' warn');
+  const fe=$('feNote');
+  if(!D.ratioInt) fe.innerHTML='<b>Beat frequency.</b> Carrier and PWM are not integer related, producing a '+D.beat.toFixed(0)+' Hz beat that appears as angle ripple.';
+  else if(D.util>=1) fe.innerHTML='<b>Clipping.</b> The receive gain drives the modulator past full scale. Reduce it.';
+  else if(D.util<.55) fe.innerHTML='<b>Under-filled.</b> You are throwing away resolution. Raise the receive gain until you sit near full scale at peak coupling.';
+  else fe.innerHTML='<b>Consistent.</b> Integer carrier ratio, sensible headroom, noise floor well below the calibration residual.';
+  fe.className='note '+((!D.ratioInt||D.util>=1)?'bad':(D.util<.55?'':'ok'));
+
+  const dphi=cfg.phys-cfg.comp;
+  $('vPhys').textContent=cfg.phys.toFixed(1)+'\u00b0';
+  $('vComp').textContent=cfg.comp.toFixed(1)+'\u00b0';
+  $('oDphi').textContent=dphi.toFixed(1)+'\u00b0';
+  const ar=$('oAmpRet'); ar.textContent=(Math.cos(dphi*D2R)*100).toFixed(1)+' %';
+  ar.className='v'+(Math.abs(dphi)<2?' good':' warn');
+  const lk=$('oLeak'); lk.textContent=(Math.abs(Math.sin(dphi*D2R))*100).toFixed(1)+' %';
+  lk.className='v'+(Math.abs(dphi)<2?' good':' warn');
+  $('demOut').textContent=(Math.cos(30*D2R)*Math.cos(dphi*D2R)).toFixed(3);
+
+  $('valA').textContent=(cfg.a*100).toFixed(1)+' %';
+  $('valB').textContent=(cfg.b*100).toFixed(1)+' %';
+  $('valG').textContent=(cfg.g*100).toFixed(1)+' %';
+  $('valE').textContent=cfg.ecc.toFixed(2)+'\u00b0';
+  $('hDC').textContent=H.dc.toFixed(2)+'\u00b0';
+  $('h1').textContent=H.h1.toFixed(2)+'\u00b0';
+  $('h2').textContent=H.h2.toFixed(2)+'\u00b0';
+  $('hRMS').textContent=H.rms.toFixed(2)+'\u00b0';
+  $('peakErr').textContent='\u00b1'+H.peak.toFixed(2)+'\u00b0';
+  const sh=shapeOf(); $('shapeName').textContent=sh[0]; $('verdict').innerHTML=sh[1];
+
+  $('vBw').textContent='\u03c9n '+cfg.bw+' rad/s';
+  $('vZeta').textContent=(cfg.type>2?'n/a':'\u03b6 '+cfg.zeta.toFixed(2));
+  if(obsCache){
+    $('obsPk').textContent=obsCache.pkAcc.toFixed(2)+'\u00b0';
+    const ae=$('oAccErr'); ae.textContent=obsCache.pkAcc.toFixed(2)+'\u00b0';
+    ae.className='v'+(obsCache.pkAcc<1?' good':(obsCache.pkAcc<5?' caution':' warn'));
+    $('oCruise').textContent=obsCache.cruise.toFixed(3)+'\u00b0';
+    $('oObsNoise').textContent=obsCache.noise.toFixed(3)+'\u00b0';
+    $('oSettle').textContent=obsCache.settle<0?'\u2014':(obsCache.settle*1000).toFixed(1)+' ms';
+    $('obsNote').innerHTML = cfg.type===3
+      ? '<b>Type III.</b> The extra integrator drives the acceleration error to zero, so the lag during the ramp collapses. The cost is one more state, a slower recovery from a step disturbance, and more sensitivity to noise.'
+      : (obsCache.pkAcc>1
+        ? '<b>Type II lags under acceleration.</b> The error during the ramp is roughly acceleration divided by \u03c9n squared &mdash; it is a structural limit, not a tuning problem. Raise \u03c9n and it shrinks, but noise rises with it. Type III removes the term entirely.'
+        : '<b>Type II, adequately fast.</b> Error at constant speed is zero by construction. The ramp error is small at this bandwidth, though it grows with the square of any increase in acceleration.');
+  }
+  $('vConf').textContent=cfg.conf;
+  $('oReact').textContent=(cfg.conf/cfg.fpwm*1e6).toFixed(0)+' \u00b5s';
+  $('typeHint').textContent = cfg.type>2
+    ? 'Type III places three poles at \u2212\u03c9n, so the damping slider does not apply.'
+    : 'Acceleration error scales as \u03b1/\u03c9n\u00b2 \u2014 a structural property of the loop order.';
+  $('valRpm').textContent=cfg.rpm.toLocaleString()+' rpm';
+  $('valPP').textContent=cfg.ppMot;
+  $('totLat').textContent=(D.tTot*1e6).toFixed(0)+' \u00b5s';
+  $('oLat').textContent=(D.tTot*1e6).toFixed(1)+' \u00b5s';
+  const e=lagRad(),ed=e*R2D;
+  const ld=$('outLagDeg'); ld.textContent=ed.toFixed(1)+'\u00b0';
+  ld.className='v'+(Math.abs(ed)>5?' warn':' good');
+  const tq=Math.cos(e)*100,dq=Math.abs(Math.sin(e))*100;
+  const to=$('outTorque'); to.textContent=tq.toFixed(1)+' %'; to.className='v'+(tq<95?' warn':' good');
+  const da=$('outDaxis'); da.textContent=dq.toFixed(1)+' %'; da.className='v'+(dq>5?' warn':' good');
+  const iT=initTimes(), iTot=iT[iT.length-1]*1100;
+  $('initClock').textContent=initT<0?'0 ms':Math.min(iTot,performance.now()-initStart).toFixed(0)+' ms';
+  drawChecks();
+}
+
+/* ===================== loop ===================== */
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(.05,(now-last)/1000); last=now;
+  if(cfg.spin){cfg.theta=(cfg.theta+dt*.7)%TAU; $('rngTheta').value=Math.round(cfg.theta*R2D)%360;}
+  refresh();
+  drawResolver(); drawWaves(); drawDemod();
+  const H=harmonics(); drawLissajous(); drawError(H);
+  drawObserver(); drawBudget(); drawLag(); drawInit(); drawDiag();
+  requestAnimationFrame(frame);
+}
+
+/* ===================== wiring ===================== */
+function bind(id,fn,dirty){
+  const el=$(id); if(!el)return;
+  el.addEventListener('input',()=>{fn(parseFloat(el.value)); if(dirty)obsDirty=true;});
+}
+bind('rngTheta',v=>{cfg.theta=v*D2R;cfg.spin=false;$('btnSpin').setAttribute('aria-pressed','false');});
+bind('rFexc',v=>cfg.fexc=v*1000,true);
+bind('rVexc',v=>cfg.Vexc=v);
+bind('rK',v=>cfg.k=v);
+bind('rPPR',v=>cfg.ppRes=v,true);
+bind('rGain',v=>cfg.gain=v,true);
+bind('rFmod',v=>cfg.fmod=v*1e6,true);
+bind('rDec',v=>cfg.dec=v,true);
+bind('rFpwm',v=>cfg.fpwm=v*1000,true);
+bind('rPhys',v=>cfg.phys=v);
+bind('rComp',v=>cfg.comp=v);
+bind('rngA',v=>cfg.a=v/100);
+bind('rngB',v=>cfg.b=v/100);
+bind('rngG',v=>cfg.g=v/100);
+bind('rngE',v=>cfg.ecc=v);
+bind('rBw',v=>cfg.bw=v,true);
+bind('rZeta',v=>cfg.zeta=v,true);
+bind('rngRpm',v=>cfg.rpm=v);
+bind('rngPP',v=>cfg.ppMot=v,true);
+bind('rConf',v=>cfg.conf=v);
+
+$('selType').addEventListener('change',e=>{cfg.type=parseInt(e.target.value,10);obsDirty=true;});
+$('btnNoise').addEventListener('click',e=>{cfg.noise=!cfg.noise;
+  e.currentTarget.setAttribute('aria-pressed',String(cfg.noise));obsDirty=true;});
+$('btnSpin').addEventListener('click',e=>{cfg.spin=!cfg.spin;
+  e.currentTarget.setAttribute('aria-pressed',String(cfg.spin));});
+$('btnStep').addEventListener('click',()=>{cfg.spin=false;$('btnSpin').setAttribute('aria-pressed','false');
+  cfg.theta=(Math.round(cfg.theta/(Math.PI/4))*(Math.PI/4)+Math.PI/4)%TAU;
+  $('rngTheta').value=Math.round(cfg.theta*R2D)%360;});
+$('btnComp').addEventListener('click',e=>{cfg.latComp=!cfg.latComp;
+  e.currentTarget.setAttribute('aria-pressed',String(cfg.latComp));});
+$('btnMatch').addEventListener('click',()=>{cfg.comp=cfg.phys;$('rComp').value=cfg.comp;});
+$('btnLut').addEventListener('click',e=>{cfg.lut=!cfg.lut;
+  e.currentTarget.setAttribute('aria-pressed',String(cfg.lut));});
+$('btnEstimate').addEventListener('click',()=>{
+  const c=estimateComp(); cfg.ca=c.ca;cfg.cb=c.cb;cfg.cg=c.cg;cfg.cp=c.cp;});
+$('btnInit').addEventListener('click',()=>{initT=1;initStart=performance.now();});
+$('btnInitStand').addEventListener('click',e=>{cfg.standstill=!cfg.standstill;
+  e.currentTarget.setAttribute('aria-pressed',String(cfg.standstill));
+  $('btnInitStand').textContent=cfg.standstill?'At standstill':'Shaft turning';});
+
+const PRESETS={offset:{a:.09,b:.06,g:0,ecc:0},gain:{a:0,b:0,g:.18,ecc:0},
+               ecc:{a:0,b:0,g:0,ecc:1.6},mess:{a:.07,b:-.05,g:.13,ecc:1.0},
+               clean:{a:0,b:0,g:0,ecc:0}};
+document.querySelectorAll('[data-preset]').forEach(b=>b.addEventListener('click',()=>{
+  const p=PRESETS[b.dataset.preset];
+  cfg.a=p.a;cfg.b=p.b;cfg.g=p.g;cfg.ecc=p.ecc;
+  cfg.ca=0;cfg.cb=0;cfg.cg=0;cfg.cp=0;
+  $('rngA').value=p.a*100;$('rngB').value=p.b*100;$('rngG').value=p.g*100;$('rngE').value=p.ecc;
+}));
+document.querySelectorAll('[data-fault]').forEach(b=>b.addEventListener('click',()=>{
+  cfg.fault=b.dataset.fault; faultIdx=diagTrace.length-1; confCount=[0,0,0,0,0];
+  document.querySelectorAll('[data-fault]').forEach(o=>o.setAttribute('aria-pressed',String(o===b)));
+}));
+
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
