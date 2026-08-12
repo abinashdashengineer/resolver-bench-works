@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resolver Bench — rotor angle sensing on AURIX TC3xx</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --chassis:#d7dce2;
+  --panel:#eef1f4;
+  --panel-2:#e3e8ed;
+  --ink:#14202b;
+  --muted:#5d6d7d;
+  --rule:#bfc8d2;
+  --screen:#0d1620;
+  --grid:#1c2b39;
+  --sin:#f2681f;
+  --cos:#15a394;
+  --exc:#7d93a8;
+  --err:#dc4436;
+  --shadow:0 1px 0 #fff inset, 0 1px 3px rgba(20,32,43,.16);
+}
+*{box-sizing:border-box}
+html,body{margin:0;padding:0}
+body{
+  background:
+    linear-gradient(180deg,#e2e6eb 0%, var(--chassis) 340px, var(--chassis) 100%);
+  color:var(--ink);
+  font-family:"IBM Plex Sans",system-ui,sans-serif;
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{max-width:1140px;margin:0 auto;padding:0 22px 80px}
+
+/* ---------- type roles ---------- */
+.silk{
+  font-family:"IBM Plex Sans Condensed",sans-serif;
+  font-weight:600;
+  text-transform:uppercase;
+  letter-spacing:.14em;
+  font-size:11px;
+  color:var(--muted);
+}
+.num{font-family:"IBM Plex Mono",monospace;font-variant-numeric:tabular-nums}
+h1,h2{font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:700;letter-spacing:-.005em;margin:0}
+h1{font-size:clamp(34px,5.4vw,60px);line-height:1.02}
+h2{font-size:clamp(21px,2.7vw,29px);line-height:1.12}
+
+/* ---------- masthead ---------- */
+header{padding:64px 0 40px;border-bottom:1px solid var(--rule)}
+.eyebrow{display:flex;gap:14px;align-items:center;margin-bottom:20px}
+.eyebrow .tick{height:1px;flex:1;background:var(--rule)}
+.lede{max-width:56ch;margin:20px 0 0;color:var(--muted);font-size:16.5px}
+.lede b{color:var(--ink);font-weight:500}
+
+/* ---------- module scaffolding ---------- */
+.module{padding:52px 0;border-bottom:1px solid var(--rule)}
+.mod-head{display:flex;gap:18px;align-items:baseline;margin-bottom:8px}
+.mod-head .idx{
+  font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--sin);
+  letter-spacing:.08em;padding-top:6px;flex:none
+}
+.mod-sub{color:var(--muted);max-width:62ch;margin:10px 0 30px}
+
+/* ---------- panels ---------- */
+.panel{
+  background:var(--panel);
+  border:1px solid var(--rule);
+  border-radius:5px;
+  box-shadow:var(--shadow);
+  padding:16px 18px 18px;
+}
+.panel-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;gap:12px}
+.screen{background:var(--screen);border-radius:4px;border:1px solid #0a1119;display:block;width:100%}
+
+.grid-sensor{display:grid;grid-template-columns:340px 1fr;gap:18px;align-items:start}
+.grid-circle{display:grid;grid-template-columns:1fr 250px;gap:18px;align-items:start}
+.grid-lat{display:grid;grid-template-columns:1fr 1fr;gap:18px;align-items:start}
+
+/* ---------- controls ---------- */
+.ctl{margin:14px 0 0}
+.ctl-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:5px}
+.ctl-val{font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:500}
+input[type=range]{
+  -webkit-appearance:none;appearance:none;width:100%;height:22px;background:transparent;cursor:pointer;margin:0
+}
+input[type=range]::-webkit-slider-runnable-track{height:3px;background:var(--rule);border-radius:2px}
+input[type=range]::-moz-range-track{height:3px;background:var(--rule);border-radius:2px}
+input[type=range]::-webkit-slider-thumb{
+  -webkit-appearance:none;width:16px;height:16px;margin-top:-6.5px;border-radius:50%;
+  background:var(--ink);border:2px solid var(--panel);box-shadow:0 0 0 1px var(--ink)
+}
+input[type=range]::-moz-range-thumb{
+  width:14px;height:14px;border-radius:50%;background:var(--ink);border:2px solid var(--panel);
+  box-shadow:0 0 0 1px var(--ink)
+}
+input[type=range]:focus-visible{outline:2px solid var(--sin);outline-offset:3px;border-radius:3px}
+
+button{
+  font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;text-transform:uppercase;
+  letter-spacing:.1em;font-size:11px;color:var(--ink);
+  background:linear-gradient(180deg,#fbfcfd,#dfe4ea);
+  border:1px solid var(--rule);border-radius:3px;padding:8px 12px;cursor:pointer;
+  box-shadow:0 1px 0 #fff inset;
+}
+button:hover{background:linear-gradient(180deg,#fff,#e9edf1)}
+button:active{background:#d8dee5;box-shadow:0 1px 2px rgba(0,0,0,.14) inset}
+button:focus-visible{outline:2px solid var(--sin);outline-offset:2px}
+button[aria-pressed=true]{background:var(--ink);color:#f2f5f8;border-color:var(--ink)}
+.btn-row{display:flex;flex-wrap:wrap;gap:7px;margin-top:14px}
+.btn-accent{background:linear-gradient(180deg,#fff4ee,#f8d9c7);border-color:#e0a988;color:#8a3a10}
+.btn-accent:hover{background:linear-gradient(180deg,#fff,#fbe4d6)}
+
+/* ---------- readouts ---------- */
+.readout{
+  background:var(--panel-2);border:1px solid var(--rule);border-radius:4px;
+  padding:10px 12px;display:flex;justify-content:space-between;align-items:baseline;gap:10px
+}
+.readout + .readout{margin-top:7px}
+.readout .v{font-family:"IBM Plex Mono",monospace;font-size:16px;font-weight:500}
+.readout .v.warn{color:var(--err)}
+.readout .v.good{color:var(--cos)}
+.chips{display:flex;gap:16px;flex-wrap:wrap;margin-top:12px}
+.chip{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--muted)}
+.swatch{width:11px;height:11px;border-radius:2px;flex:none}
+
+.verdict{
+  margin-top:14px;padding:11px 13px;border-left:3px solid var(--rule);
+  background:var(--panel-2);border-radius:0 4px 4px 0;font-size:13.5px;min-height:62px
+}
+.verdict b{font-weight:600}
+
+table.harm{width:100%;border-collapse:collapse;margin-top:12px;font-size:13px}
+table.harm th{
+  text-align:left;font-family:"IBM Plex Sans Condensed",sans-serif;font-weight:600;
+  text-transform:uppercase;letter-spacing:.1em;font-size:10.5px;color:var(--muted);
+  padding:0 0 6px;border-bottom:1px solid var(--rule)
+}
+table.harm td{padding:7px 0;border-bottom:1px solid var(--rule)}
+table.harm td:last-child{text-align:right;font-family:"IBM Plex Mono",monospace;font-weight:500;white-space:nowrap}
+table.harm td:nth-child(2){font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+
+footer{padding:40px 0 0;color:var(--muted);font-size:13.5px;max-width:64ch}
+
+@media (max-width:900px){
+  .grid-sensor,.grid-circle,.grid-lat{grid-template-columns:1fr}
+  header{padding:44px 0 32px}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <div class="eyebrow"><span class="silk">Resolver Bench</span><span class="tick"></span><span class="silk">AURIX&trade; TC3xx</span></div>
+  <h1>Where is the<br>rotor, right now?</h1>
+  <p class="lede">Every field-oriented control loop depends on that answer. Turn the shaft, break the sensor on purpose, and watch what each fault does to the angle you compute. <b>Everything below is live.</b></p>
+</header>
+
+<!-- ============ 1. THE SENSOR ============ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">01</span><h2>The sensor is a rotating transformer</h2></div>
+  <p class="mod-sub">One carrier goes into the rotor. It comes back on two stator windings, scaled by sine and cosine of the shaft angle. The angle is in the <em>amplitude</em>, never in the wave itself.</p>
+
+  <div class="grid-sensor">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Cross-section</span><span class="silk num" id="thetaLabel">0.0&deg;</span></div>
+      <canvas id="cvResolver" class="screen" style="height:300px"></canvas>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Shaft angle</span><span class="ctl-val" id="valTheta">0&deg;</span></div>
+        <input type="range" id="rngTheta" min="0" max="359" step="1" value="0" aria-label="Shaft angle in degrees">
+      </div>
+      <div class="btn-row">
+        <button id="btnSpin" aria-pressed="true">Spin</button>
+        <button id="btnStep">Step 45&deg;</button>
+      </div>
+      <div class="chips">
+        <span class="chip"><span class="swatch" style="background:var(--sin)"></span>Stator A &middot; sin</span>
+        <span class="chip"><span class="swatch" style="background:var(--cos)"></span>Stator B &middot; cos</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Winding voltages over one revolution</span><span class="silk">Carrier &times; envelope</span></div>
+      <canvas id="cvWaves" class="screen" style="height:330px"></canvas>
+      <div style="margin-top:12px">
+        <div class="readout"><span class="silk">Stator A, demodulated</span><span class="v" id="outSin" style="color:var(--sin)">0.000</span></div>
+        <div class="readout"><span class="silk">Stator B, demodulated</span><span class="v" id="outCos" style="color:var(--cos)">1.000</span></div>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin:12px 0 0">The dashed outline is the envelope. Strip the carrier away with synchronous demodulation and the two dashed curves are all that is left &mdash; plain sine and cosine.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 2. THE CIRCLE ============ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">02</span><h2>Plot one against the other. You want a circle.</h2></div>
+  <p class="mod-sub">The angle you compute is the polar angle of the point (cos, sin) measured from the origin. So the measured point has to orbit the origin at a constant radius. Inject a fault and watch the shape break &mdash; each distortion produces its own signature in the angle error.</p>
+
+  <div class="grid-circle">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">X&ndash;Y scope &middot; cos on X, sin on Y</span><span class="silk" id="shapeName">Circle</span></div>
+      <canvas id="cvLissajous" class="screen" style="height:380px"></canvas>
+      <div class="chips">
+        <span class="chip"><span class="swatch" style="background:#e9eff5;border:1px solid var(--muted)"></span>Measured</span>
+        <span class="chip"><span class="swatch" style="background:#2c4054"></span>Ideal circle</span>
+        <span class="chip"><span class="swatch" style="background:var(--err)"></span>Live point &amp; radius</span>
+      </div>
+      <div class="panel-top" style="margin:18px 0 10px"><span class="silk">Angle error over one revolution</span><span class="silk num" id="peakErr">&plusmn;0.00&deg;</span></div>
+      <canvas id="cvError" class="screen" style="height:150px"></canvas>
+    </div>
+
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Inject a fault</span></div>
+
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Offset, cos channel</span><span class="ctl-val" id="valA">0.0 %</span></div>
+        <input type="range" id="rngA" min="-20" max="20" step="0.5" value="0" aria-label="Offset on cos channel, percent">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Offset, sin channel</span><span class="ctl-val" id="valB">0.0 %</span></div>
+        <input type="range" id="rngB" min="-20" max="20" step="0.5" value="0" aria-label="Offset on sin channel, percent">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Gain mismatch</span><span class="ctl-val" id="valG">0.0 %</span></div>
+        <input type="range" id="rngG" min="-30" max="30" step="0.5" value="0" aria-label="Gain mismatch between channels, percent">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Demodulation phase</span><span class="ctl-val" id="valP">0.0&deg;</span></div>
+        <input type="range" id="rngP" min="-25" max="25" step="0.5" value="0" aria-label="Demodulation phase error in degrees">
+      </div>
+
+      <div class="btn-row">
+        <button data-preset="offset">Offset</button>
+        <button data-preset="gain">Gain</button>
+        <button data-preset="phase">Phase</button>
+        <button data-preset="mess">All three</button>
+      </div>
+      <div class="btn-row">
+        <button class="btn-accent" id="btnCal" style="width:100%">Apply compensation</button>
+      </div>
+
+      <table class="harm">
+        <thead><tr><th>Term</th><th>Cause</th><th style="text-align:right">Size</th></tr></thead>
+        <tbody>
+          <tr><td>DC</td><td>Phase</td><td id="hDC">0.00&deg;</td></tr>
+          <tr><td>1st harm.</td><td>Offset</td><td id="h1">0.00&deg;</td></tr>
+          <tr><td>2nd harm.</td><td>Gain, phase</td><td id="h2">0.00&deg;</td></tr>
+        </tbody>
+      </table>
+
+      <div class="verdict" id="verdict"><b>Circle, centred.</b> Gains matched, offsets nulled, channels exactly 90&deg; apart. This is the condition under which atan2 returns the true angle.</div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ 3. LATENCY ============ -->
+<section class="module">
+  <div class="mod-head"><span class="idx">03</span><h2>A perfect angle, arriving late, is a wrong angle</h2></div>
+  <p class="mod-sub">Filters, interrupts and PWM update timing all add delay. At speed, the shaft has moved on by the time you use the reading. This one costs torque silently &mdash; nothing looks broken.</p>
+
+  <div class="grid-lat">
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Operating point</span></div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Shaft speed</span><span class="ctl-val" id="valRpm">6000 rpm</span></div>
+        <input type="range" id="rngRpm" min="0" max="20000" step="250" value="6000" aria-label="Shaft speed in rpm">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Motor pole pairs</span><span class="ctl-val" id="valPP">4</span></div>
+        <input type="range" id="rngPP" min="1" max="8" step="1" value="4" aria-label="Motor pole pairs">
+      </div>
+      <div class="ctl">
+        <div class="ctl-row"><span class="silk">Total signal delay</span><span class="ctl-val" id="valDly">50 &micro;s</span></div>
+        <input type="range" id="rngDly" min="0" max="200" step="5" value="50" aria-label="Total signal delay in microseconds">
+      </div>
+      <div class="btn-row">
+        <button id="btnComp" aria-pressed="false">Compensate: &theta; + &omega;&middot;t</button>
+      </div>
+      <p style="font-size:13px;color:var(--muted);margin:14px 0 0">Compensation extrapolates the angle forward using the speed the tracking observer already gives you. Measure the delay on the bench rather than estimating it &mdash; the EDSADC timestamp register makes this straightforward.</p>
+    </div>
+
+    <div class="panel">
+      <div class="panel-top"><span class="silk">Consequence</span></div>
+      <canvas id="cvLag" class="screen" style="height:260px"></canvas>
+      <div style="margin-top:12px">
+        <div class="readout"><span class="silk">Electrical angle error</span><span class="v" id="outLagDeg">0.0&deg;</span></div>
+        <div class="readout"><span class="silk">Torque per amp retained</span><span class="v" id="outTorque">100.0 %</span></div>
+        <div class="readout"><span class="silk">Current pushed onto d-axis</span><span class="v" id="outDaxis">0.0 %</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Model is idealised: a two-pole resolver, ideal demodulation apart from the injected phase term, and no mechanical eccentricity. Real units add harmonics from winding imperfection and rotor runout, which is what the correction table at the end of calibration is for.
+</footer>
+
+</div>
+
+<script>
+(function(){
+"use strict";
+const TAU = Math.PI*2, D2R = Math.PI/180, R2D = 180/Math.PI;
+const css = getComputedStyle(document.documentElement);
+const C = n => css.getPropertyValue(n).trim();
+const COL = {sin:C('--sin'), cos:C('--cos'), exc:C('--exc'), err:C('--err'),
+             grid:C('--grid'), muted:'#7d8b99', screen:C('--screen')};
+const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+const S = { theta:0, spin:!reduced, a:0, b:0, g:0, p:0,
+            rpm:6000, pp:4, dly:50, comp:false };
+
+/* ---------- hidpi canvas ---------- */
+function fit(cv){
+  const dpr = Math.min(window.devicePixelRatio||1, 2);
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if(!w||!h) return null;
+  if(cv.width !== Math.round(w*dpr) || cv.height !== Math.round(h*dpr)){
+    cv.width = Math.round(w*dpr); cv.height = Math.round(h*dpr);
+  }
+  const g = cv.getContext('2d');
+  g.setTransform(dpr,0,0,dpr,0,0);
+  g.clearRect(0,0,w,h);
+  return {g,w,h};
+}
+function label(g,t,x,y,col,size,align){
+  g.fillStyle=col; g.font='500 '+(size||10)+'px "IBM Plex Mono", monospace';
+  g.textAlign=align||'left'; g.textBaseline='middle'; g.fillText(t,x,y);
+}
+
+/* ---------- sensor model ---------- */
+// Clean channels, then the injected imperfections.
+function channels(th){
+  const ph = S.p*D2R;
+  const x = Math.cos(th) + S.a;                                  // cos channel
+  const y = (1+S.g)*(Math.sin(th)*Math.cos(ph) + Math.cos(th)*Math.sin(ph)) + S.b;
+  return {x,y};
+}
+function estimate(th){ const c = channels(th); return Math.atan2(c.y, c.x); }
+function wrap(e){ while(e> Math.PI) e-=TAU; while(e<-Math.PI) e+=TAU; return e; }
+function errAt(th){ return wrap(estimate(th)-th)*R2D; }
+
+function harmonics(){
+  const N=720; let dc=0, c1=0,s1=0, c2=0,s2=0, pk=0;
+  for(let i=0;i<N;i++){
+    const th=i/N*TAU, e=errAt(th);
+    dc+=e; c1+=e*Math.cos(th); s1+=e*Math.sin(th);
+    c2+=e*Math.cos(2*th); s2+=e*Math.sin(2*th);
+    if(Math.abs(e)>pk) pk=Math.abs(e);
+  }
+  return { dc:dc/N,
+           h1:2*Math.hypot(c1,s1)/N,
+           h2:2*Math.hypot(c2,s2)/N,
+           peak:pk };
+}
+
+/* ============ 1. resolver cross-section ============ */
+const cvR = document.getElementById('cvResolver');
+function drawResolver(){
+  const f = fit(cvR); if(!f) return; const {g,w,h}=f;
+  const cx=w/2, cy=h/2, Ro=Math.min(w,h)/2-16, Ri=Ro-26, Rr=Ri-40;
+  g.fillStyle=COL.screen; g.fillRect(0,0,w,h);
+
+  g.strokeStyle=COL.grid; g.lineWidth=1.5;
+  g.beginPath(); g.arc(cx,cy,Ro,0,TAU); g.stroke();
+  g.beginPath(); g.arc(cx,cy,Ri,0,TAU); g.stroke();
+
+  // pole shoes; brightness tracks how strongly each winding is coupled
+  const sA=Math.abs(Math.sin(S.theta)), sB=Math.abs(Math.cos(S.theta));
+  function pole(ang,col,amt){
+    g.strokeStyle=col; g.globalAlpha=0.22+0.78*amt; g.lineWidth=3;
+    for(let k=0;k<3;k++){
+      const r=Ri+3+k*8;
+      g.beginPath(); g.arc(cx,cy,r,-ang-0.22,-ang+0.22); g.stroke();
+    }
+    g.globalAlpha=1;
+  }
+  pole(Math.PI/2,COL.sin,sA); pole(-Math.PI/2,COL.sin,sA);
+  pole(0,COL.cos,sB);         pole(Math.PI,COL.cos,sB);
+
+  // reference axis
+  g.strokeStyle=COL.grid; g.lineWidth=1; g.setLineDash([4,4]);
+  g.beginPath(); g.moveTo(cx,cy); g.lineTo(cx+Ri,cy); g.stroke(); g.setLineDash([]);
+
+  // rotor bar
+  g.save(); g.translate(cx,cy); g.rotate(-S.theta);
+  g.fillStyle='#16242f'; g.strokeStyle=COL.exc; g.lineWidth=2;
+  const bw=Rr, bh=16;
+  g.beginPath();
+  if(g.roundRect) g.roundRect(-bw,-bh,bw*2,bh*2,bh);
+  else g.rect(-bw,-bh,bw*2,bh*2);
+  g.fill(); g.stroke();
+  for(let k=0;k<4;k++){
+    const xo=-bw*0.52+k*(bw*0.35);
+    g.beginPath(); g.moveTo(xo,-bh); g.quadraticCurveTo(xo+7,0,xo,bh); g.stroke();
+  }
+  g.restore();
+
+  // angle arc
+  const ar=Rr+18;
+  g.strokeStyle='#c9d6e2'; g.lineWidth=2;
+  g.beginPath(); g.arc(cx,cy,ar,-S.theta,0); g.stroke();
+  g.beginPath(); g.moveTo(cx,cy);
+  g.lineTo(cx+Ri*Math.cos(S.theta), cy-Ri*Math.sin(S.theta)); g.stroke();
+  g.fillStyle='#c9d6e2'; g.beginPath(); g.arc(cx,cy,5,0,TAU); g.fill();
+  const ta=S.theta/2;
+  label(g,'\u03b8', cx+(ar+13)*Math.cos(ta), cy-(ar+13)*Math.sin(ta), '#c9d6e2', 13, 'center');
+}
+
+/* ============ 1b. modulated waveforms ============ */
+const cvW = document.getElementById('cvWaves');
+function drawWaves(){
+  const f = fit(cvW); if(!f) return; const {g,w,h}=f;
+  g.fillStyle=COL.screen; g.fillRect(0,0,w,h);
+  const L=46, R=w-14, N=760, rows=3, gap=h/rows;
+  const amp=gap*0.33;
+
+  const defs=[
+    {name:'EXCITATION', col:COL.exc, env:null},
+    {name:'STATOR A',   col:COL.sin, env:t=>Math.sin(t)},
+    {name:'STATOR B',   col:COL.cos, env:t=>Math.cos(t)}
+  ];
+
+  defs.forEach((d,i)=>{
+    const y0=gap*(i+0.5);
+    g.strokeStyle=COL.grid; g.lineWidth=1;
+    g.beginPath(); g.moveTo(L,y0); g.lineTo(R,y0); g.stroke();
+    label(g,d.name,8,y0-amp-9,d.col,9.5);
+
+    if(d.env){                                   // envelope
+      g.strokeStyle=d.col; g.globalAlpha=.75; g.lineWidth=1.6; g.setLineDash([5,4]);
+      for(const sg of [1,-1]){
+        g.beginPath();
+        for(let k=0;k<=N;k++){
+          const t=k/N*TAU, x=L+(k/N)*(R-L), y=y0-sg*d.env(t)*amp;
+          k?g.lineTo(x,y):g.moveTo(x,y);
+        }
+        g.stroke();
+      }
+      g.setLineDash([]); g.globalAlpha=1;
+    }
+    g.strokeStyle=d.col; g.lineWidth=1; g.globalAlpha=.95;   // carrier
+    g.beginPath();
+    for(let k=0;k<=N;k++){
+      const t=k/N*TAU, e=d.env?d.env(t):1;
+      const x=L+(k/N)*(R-L), y=y0-e*Math.sin(t*30)*amp;
+      k?g.lineTo(x,y):g.moveTo(x,y);
+    }
+    g.stroke(); g.globalAlpha=1;
+  });
+
+  // cursor at the current shaft angle
+  const cx=L+(S.theta/TAU)*(R-L);
+  g.strokeStyle='#e8eef4'; g.globalAlpha=.5; g.lineWidth=1; g.setLineDash([3,3]);
+  g.beginPath(); g.moveTo(cx,8); g.lineTo(cx,h-20); g.stroke();
+  g.setLineDash([]); g.globalAlpha=1;
+  defs.forEach((d,i)=>{
+    if(!d.env) return;
+    const y0=gap*(i+0.5), y=y0-d.env(S.theta)*amp;
+    g.fillStyle=d.col; g.beginPath(); g.arc(cx,y,3.5,0,TAU); g.fill();
+  });
+
+  g.strokeStyle=COL.grid; g.beginPath(); g.moveTo(L,h-16); g.lineTo(R,h-16); g.stroke();
+  [0,90,180,270,360].forEach(dg=>{
+    const x=L+(dg/360)*(R-L);
+    label(g,dg+'\u00b0',x,h-7,COL.muted,9.5,'center');
+  });
+}
+
+/* ============ 2. lissajous ============ */
+const cvL = document.getElementById('cvLissajous');
+function drawLissajous(){
+  const f = fit(cvL); if(!f) return; const {g,w,h}=f;
+  g.fillStyle=COL.screen; g.fillRect(0,0,w,h);
+  const cx=w/2, cy=h/2, R=Math.min(w,h)/2-30;
+
+  g.strokeStyle=COL.grid; g.lineWidth=1;                   // graticule
+  for(let k=-2;k<=2;k++){
+    const o=k*R/2;
+    g.beginPath(); g.moveTo(cx-R-10,cy+o); g.lineTo(cx+R+10,cy+o); g.stroke();
+    g.beginPath(); g.moveTo(cx+o,cy-R-10); g.lineTo(cx+o,cy+R+10); g.stroke();
+  }
+  g.strokeStyle='#2c4054'; g.lineWidth=1.5; g.setLineDash([3,4]);
+  g.beginPath(); g.arc(cx,cy,R,0,TAU); g.stroke(); g.setLineDash([]);
+
+
+  g.strokeStyle='#95a8ba'; g.lineWidth=1;                  // origin cross
+  g.beginPath(); g.moveTo(cx-7,cy); g.lineTo(cx+7,cy); g.stroke();
+  g.beginPath(); g.moveTo(cx,cy-7); g.lineTo(cx,cy+7); g.stroke();
+
+  const P=t=>{const c=channels(t); return [cx+c.x*R, cy-c.y*R];};
+
+  g.strokeStyle='#e9eff5'; g.lineWidth=2;                  // measured locus
+  g.beginPath();
+  for(let k=0;k<=360;k++){const p=P(k/360*TAU); k?g.lineTo(p[0],p[1]):g.moveTo(p[0],p[1]);}
+  g.closePath(); g.stroke();
+
+  const p=P(S.theta);
+  g.strokeStyle=COL.err; g.lineWidth=1.5;                  // radius to the live point
+  g.beginPath(); g.moveTo(cx,cy); g.lineTo(p[0],p[1]); g.stroke();
+  g.strokeStyle='#4f6b85'; g.setLineDash([3,3]); g.lineWidth=1;   // true direction
+  g.beginPath(); g.moveTo(cx,cy);
+  g.lineTo(cx+Math.cos(S.theta)*R, cy-Math.sin(S.theta)*R); g.stroke(); g.setLineDash([]);
+
+  g.fillStyle=COL.err; g.beginPath(); g.arc(p[0],p[1],4.5,0,TAU); g.fill();
+  label(g,'\u2191 sin', 12, 16, COL.sin, 9.5, 'left');
+  label(g,'cos \u2192', w-12, h-13, COL.cos, 9.5, 'right');
+}
+
+/* ============ 2b. angle error trace ============ */
+const cvE = document.getElementById('cvError');
+function drawError(H){
+  const f = fit(cvE); if(!f) return; const {g,w,h}=f;
+  g.fillStyle=COL.screen; g.fillRect(0,0,w,h);
+  const L=48, R=w-12, T=14, B=h-20, mid=(T+B)/2;
+  const span=Math.max(0.5, H.peak*1.25), sc=(B-T)/2/span;
+
+  g.strokeStyle=COL.grid; g.lineWidth=1;
+  [T,mid,B].forEach(y=>{g.beginPath();g.moveTo(L,y);g.lineTo(R,y);g.stroke();});
+  label(g,'+'+span.toFixed(2)+'\u00b0',L-6,T,COL.muted,9.5,'right');
+  label(g,'0',L-6,mid,COL.muted,9.5,'right');
+  label(g,'\u2212'+span.toFixed(2)+'\u00b0',L-6,B,COL.muted,9.5,'right');
+
+  g.strokeStyle=COL.err; g.lineWidth=2; g.beginPath();
+  for(let k=0;k<=360;k++){
+    const th=k/360*TAU, x=L+(k/360)*(R-L), y=mid-errAt(th)*sc;
+    k?g.lineTo(x,y):g.moveTo(x,y);
+  }
+  g.stroke();
+
+  const cx=L+(S.theta/TAU)*(R-L), cyv=mid-errAt(S.theta)*sc;
+  g.fillStyle='#e9eff5'; g.beginPath(); g.arc(cx,cyv,3.5,0,TAU); g.fill();
+  [0,90,180,270,360].forEach(dg=>{
+    label(g,dg+'\u00b0',L+(dg/360)*(R-L),h-8,COL.muted,9.5,'center');
+  });
+}
+
+/* ============ 3. latency ============ */
+const cvG = document.getElementById('cvLag');
+function lagRad(){
+  if(S.comp) return 0;
+  const omegaE = S.rpm/60*TAU*S.pp;      // electrical rad/s
+  return omegaE * S.dly*1e-6;
+}
+function drawLag(){
+  const f = fit(cvG); if(!f) return; const {g,w,h}=f;
+  g.fillStyle=COL.screen; g.fillRect(0,0,w,h);
+  const err=lagRad(), phase=performance.now()/1400;
+
+  /* --- left: where the rotor is vs where you think it is --- */
+  const cx=w*0.26, cy=h/2, R=Math.min(h*0.33, w*0.20);
+  g.strokeStyle=COL.grid; g.lineWidth=1;
+  g.beginPath(); g.arc(cx,cy,R,0,TAU); g.stroke();
+
+  function vec(ang,col,dash){
+    g.strokeStyle=col; g.lineWidth=2.5; g.setLineDash(dash||[]);
+    const x=cx+Math.cos(ang)*R, y=cy-Math.sin(ang)*R;
+    g.beginPath(); g.moveTo(cx,cy); g.lineTo(x,y); g.stroke(); g.setLineDash([]);
+    g.fillStyle=col; g.beginPath(); g.arc(x,y,4,0,TAU); g.fill();
+  }
+  vec(phase, COL.cos);
+  if(Math.abs(err)>1e-4){
+    vec(phase-err, COL.err, [4,3]);
+    g.strokeStyle=COL.err; g.lineWidth=1.5; g.globalAlpha=.55;
+    g.beginPath(); g.arc(cx,cy,R*0.45,-phase,-(phase-err)); g.stroke(); g.globalAlpha=1;
+  }
+  g.fillStyle='#c9d6e2'; g.beginPath(); g.arc(cx,cy,4,0,TAU); g.fill();
+  label(g,'\u25cf true rotor', cx, cy+R+20, COL.cos, 9.5, 'center');
+  label(g, S.comp?'\u25cf angle used \u00b7 compensated':'\u25cf angle used \u00b7 '+(err*R2D).toFixed(1)+'\u00b0 behind',
+        cx, cy+R+36, S.comp?COL.cos:COL.err, 9.5, 'center');
+
+  /* --- right: how the loss builds with speed --- */
+  const L=w*0.50, Rt=w-18, T=26, B=h-34;
+  const torque = rpm => {
+    const e = S.comp ? 0 : (rpm/60*TAU*S.pp)*S.dly*1e-6;
+    return Math.max(0, Math.cos(e));
+  };
+  // scale to the drop that actually happens, or the curve reads as a flat line
+  const tMin = torque(20000);
+  const lo = Math.max(0, Math.min(tMin - 0.02, 0.985));
+  const map = v => B-(B-T)*((v-lo)/(1-lo));
+
+  g.strokeStyle=COL.grid; g.lineWidth=1;
+  [1, lo+(1-lo)/2, lo].forEach(v=>{
+    const y=map(v); g.beginPath(); g.moveTo(L,y); g.lineTo(Rt,y); g.stroke();
+  });
+  label(g,'100%',L-6,T,COL.muted,9,'right');
+  label(g,(lo*100).toFixed(lo>0.99?1:0)+'%',L-6,B,COL.muted,9,'right');
+  label(g,'TORQUE PER AMP vs SPEED',L,12,COL.muted,9.5,'left');
+
+  g.strokeStyle=S.comp?COL.cos:COL.err; g.lineWidth=2; g.beginPath();
+  for(let k=0;k<=120;k++){
+    const rpm=k/120*20000, x=L+(k/120)*(Rt-L), y=map(torque(rpm));
+    k?g.lineTo(x,y):g.moveTo(x,y);
+  }
+  g.stroke();
+
+  const mx=L+(S.rpm/20000)*(Rt-L), my=map(torque(S.rpm));
+  g.strokeStyle='#e9eff5'; g.globalAlpha=.45; g.setLineDash([3,3]); g.lineWidth=1;
+  g.beginPath(); g.moveTo(mx,T); g.lineTo(mx,B); g.stroke();
+  g.setLineDash([]); g.globalAlpha=1;
+  g.fillStyle='#e9eff5'; g.beginPath(); g.arc(mx,my,4,0,TAU); g.fill();
+
+  g.strokeStyle=COL.grid; g.beginPath(); g.moveTo(L,B); g.lineTo(Rt,B); g.stroke();
+  [0,10000,20000].forEach(r=>{
+    label(g,(r/1000)+'k',L+(r/20000)*(Rt-L),B+14,COL.muted,9,'center');
+  });
+  label(g,'rpm',Rt,B+28,COL.muted,9,'right');
+}
+
+/* ============ readouts ============ */
+const $ = id => document.getElementById(id);
+function shapeOf(){
+  const off=Math.hypot(S.a,S.b), gm=Math.abs(S.g), ph=Math.abs(S.p);
+  if(off<.005 && gm<.005 && ph<.25) return ['Circle','<b>Circle, centred.</b> Gains matched, offsets nulled, channels exactly 90&deg; apart. This is the condition under which atan2 returns the true angle.'];
+  if(off>=.02 && gm<.02 && ph<1)    return ['Off-centre','<b>Circle pushed off the origin.</b> The pivot is no longer at zero, so the computed angle gains and loses once per turn &mdash; a pure 1st harmonic. Null it with the per-channel offset compensation registers.'];
+  if(gm>=.02 && off<.02 && ph<1)    return ['Ellipse','<b>Ellipse, axes aligned.</b> One channel has more gain than the other, so the radius breathes twice per turn and drags the angle with it &mdash; a 2nd harmonic. Correct with the gain compensation registers.'];
+  if(ph>=1 && off<.02 && gm<.02)    return ['Tilted ellipse','<b>Ellipse, tilted.</b> The demodulation reference is out of step with the carrier, so the channels cross-couple. That adds a constant offset <em>and</em> a 2nd harmonic &mdash; and the constant part masquerades as a wrong motor alignment. Fix it with the demodulator sign delay, not in the FOC code.'];
+  return ['Distorted','<b>Several faults at once.</b> Work through them in order: offsets first, then gain, then demodulation phase. Fixing them out of order means chasing a moving target, because each one changes the shape the others produce.'];
+}
+function refreshText(){
+  const H=harmonics();
+  $('valTheta').textContent = (S.theta*R2D).toFixed(0)+'\u00b0';
+  $('thetaLabel').textContent = (S.theta*R2D).toFixed(1)+'\u00b0';
+  $('outSin').textContent = Math.sin(S.theta).toFixed(3);
+  $('outCos').textContent = Math.cos(S.theta).toFixed(3);
+
+  $('valA').textContent=(S.a*100).toFixed(1)+' %';
+  $('valB').textContent=(S.b*100).toFixed(1)+' %';
+  $('valG').textContent=(S.g*100).toFixed(1)+' %';
+  $('valP').textContent=S.p.toFixed(1)+'\u00b0';
+
+  $('hDC').textContent=H.dc.toFixed(2)+'\u00b0';
+  $('h1').textContent=H.h1.toFixed(2)+'\u00b0';
+  $('h2').textContent=H.h2.toFixed(2)+'\u00b0';
+  $('peakErr').textContent='\u00b1'+H.peak.toFixed(2)+'\u00b0';
+
+  const sh=shapeOf();
+  $('shapeName').textContent=sh[0];
+  $('verdict').innerHTML=sh[1];
+
+  const e=lagRad(), ed=e*R2D;
+  $('valRpm').textContent=S.rpm.toLocaleString()+' rpm';
+  $('valPP').textContent=S.pp;
+  $('valDly').textContent=S.dly+' \u00b5s';
+  $('outLagDeg').textContent=ed.toFixed(1)+'\u00b0';
+  $('outLagDeg').className='v'+(Math.abs(ed)>5?' warn':' good');
+  const tq=Math.cos(e)*100, dq=Math.abs(Math.sin(e))*100;
+  $('outTorque').textContent=tq.toFixed(1)+' %';
+  $('outTorque').className='v'+(tq<95?' warn':' good');
+  $('outDaxis').textContent=dq.toFixed(1)+' %';
+  $('outDaxis').className='v'+(dq>5?' warn':' good');
+  return H;
+}
+
+/* ============ loop ============ */
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(0.05,(now-last)/1000); last=now;
+  if(S.spin){
+    S.theta=(S.theta+dt*0.7)%TAU;
+    $('rngTheta').value=Math.round(S.theta*R2D)%360;
+  }
+  const H=refreshText();
+  drawResolver(); drawWaves(); drawLissajous(); drawError(H); drawLag();
+  requestAnimationFrame(frame);
+}
+
+/* ============ wiring ============ */
+function bind(id,fn){ const el=$(id); el.addEventListener('input',()=>fn(parseFloat(el.value))); }
+bind('rngTheta',v=>{ S.theta=v*D2R; S.spin=false; $('btnSpin').setAttribute('aria-pressed','false'); });
+bind('rngA',v=>S.a=v/100);
+bind('rngB',v=>S.b=v/100);
+bind('rngG',v=>S.g=v/100);
+bind('rngP',v=>S.p=v);
+bind('rngRpm',v=>S.rpm=v);
+bind('rngPP',v=>S.pp=v);
+bind('rngDly',v=>S.dly=v);
+
+$('btnSpin').addEventListener('click',e=>{
+  S.spin=!S.spin; e.currentTarget.setAttribute('aria-pressed',String(S.spin));
+});
+$('btnStep').addEventListener('click',()=>{
+  S.spin=false; $('btnSpin').setAttribute('aria-pressed','false');
+  S.theta=(Math.round(S.theta/(Math.PI/4))*(Math.PI/4)+Math.PI/4)%TAU;
+  $('rngTheta').value=Math.round(S.theta*R2D)%360;
+});
+$('btnComp').addEventListener('click',e=>{
+  S.comp=!S.comp; e.currentTarget.setAttribute('aria-pressed',String(S.comp));
+});
+
+const PRESETS={ offset:{a:.09,b:.06,g:0,p:0}, gain:{a:0,b:0,g:.18,p:0},
+                phase:{a:0,b:0,g:0,p:14}, mess:{a:.07,b:-.05,g:.13,p:9} };
+document.querySelectorAll('[data-preset]').forEach(btn=>{
+  btn.addEventListener('click',()=>animateTo(PRESETS[btn.dataset.preset]));
+});
+$('btnCal').addEventListener('click',()=>animateTo({a:0,b:0,g:0,p:0}));
+
+let anim=null;
+function animateTo(target){
+  if(anim) cancelAnimationFrame(anim);
+  const from={a:S.a,b:S.b,g:S.g,p:S.p}, t0=performance.now(), dur=reduced?1:520;
+  (function step(t){
+    const k=Math.min(1,(t-t0)/dur), e=k<.5?2*k*k:1-Math.pow(-2*k+2,2)/2;
+    S.a=from.a+(target.a-from.a)*e; S.b=from.b+(target.b-from.b)*e;
+    S.g=from.g+(target.g-from.g)*e; S.p=from.p+(target.p-from.p)*e;
+    $('rngA').value=(S.a*100).toFixed(1); $('rngB').value=(S.b*100).toFixed(1);
+    $('rngG').value=(S.g*100).toFixed(1); $('rngP').value=S.p.toFixed(1);
+    if(k<1) anim=requestAnimationFrame(step); else anim=null;
+  })(t0);
+}
+
+addEventListener('resize',()=>{});
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
